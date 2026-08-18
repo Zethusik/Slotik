@@ -9,10 +9,6 @@ public class Master
 
     public int CategoryId { get; set; }
     public Category Category { get; set; } = null!;
-
-    public int CityId { get; set; }
-    public City City { get; set; } = null!;
-
     public int DistrictId { get; set; }
     public District District { get; set; } = null!;
 

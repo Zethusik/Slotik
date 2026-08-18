@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Slotik.Migrations
 {
     /// <inheritdoc />
-    public partial class AddAllModels : Migration
+    public partial class FixDB : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -108,7 +108,6 @@ namespace Slotik.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     UserId = table.Column<int>(type: "integer", nullable: false),
                     CategoryId = table.Column<int>(type: "integer", nullable: false),
-                    CityId = table.Column<int>(type: "integer", nullable: false),
                     DistrictId = table.Column<int>(type: "integer", nullable: false),
                     Slug = table.Column<string>(type: "text", nullable: false),
                     About = table.Column<string>(type: "text", nullable: true),
@@ -126,17 +125,11 @@ namespace Slotik.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_Masters_Cities_CityId",
-                        column: x => x.CityId,
-                        principalTable: "Cities",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
                         name: "FK_Masters_Districts_DistrictId",
                         column: x => x.DistrictId,
                         principalTable: "Districts",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Masters_Users_UserId",
                         column: x => x.UserId,
@@ -249,8 +242,8 @@ namespace Slotik.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     MasterId = table.Column<int>(type: "integer", nullable: false),
                     Plan = table.Column<int>(type: "integer", nullable: false),
-                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false)
+                    ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -330,7 +323,7 @@ namespace Slotik.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     PaidAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     Amount = table.Column<decimal>(type: "numeric", nullable: false),
-                    Status = table.Column<bool>(type: "boolean", nullable: false),
+                    Status = table.Column<int>(type: "integer", nullable: false),
                     SubscriptionId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
@@ -396,19 +389,15 @@ namespace Slotik.Migrations
                 column: "MasterId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Favorites_UserId",
+                name: "IX_Favorites_UserId_MasterId",
                 table: "Favorites",
-                column: "UserId");
+                columns: new[] { "UserId", "MasterId" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Masters_CategoryId",
                 table: "Masters",
                 column: "CategoryId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Masters_CityId",
-                table: "Masters",
-                column: "CityId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Masters_DistrictId",

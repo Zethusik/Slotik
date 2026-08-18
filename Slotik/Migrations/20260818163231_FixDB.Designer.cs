@@ -12,8 +12,8 @@ using Slotik.Data;
 namespace Slotik.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260814120744_AddAllModels")]
-    partial class AddAllModels
+    [Migration("20260818163231_FixDB")]
+    partial class FixDB
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -170,7 +170,8 @@ namespace Slotik.Migrations
 
                     b.HasIndex("MasterId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "MasterId")
+                        .IsUnique();
 
                     b.ToTable("Favorites");
                 });
@@ -187,9 +188,6 @@ namespace Slotik.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("CategoryId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CityId")
                         .HasColumnType("integer");
 
                     b.Property<int>("DistrictId")
@@ -214,8 +212,6 @@ namespace Slotik.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
-
-                    b.HasIndex("CityId");
 
                     b.HasIndex("DistrictId");
 
@@ -271,8 +267,8 @@ namespace Slotik.Migrations
                     b.Property<DateTimeOffset>("PaidAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("Status")
-                        .HasColumnType("boolean");
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.Property<int>("SubscriptionId")
                         .HasColumnType("integer");
@@ -413,7 +409,7 @@ namespace Slotik.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("ExpiresAt")
+                    b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("MasterId")
@@ -422,9 +418,8 @@ namespace Slotik.Migrations
                     b.Property<int>("Plan")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -544,16 +539,10 @@ namespace Slotik.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Slotik.Models.City", "City")
-                        .WithMany()
-                        .HasForeignKey("CityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("Slotik.Models.District", "District")
                         .WithMany()
                         .HasForeignKey("DistrictId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Slotik.Models.User", "User")
@@ -563,8 +552,6 @@ namespace Slotik.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
-
-                    b.Navigation("City");
 
                     b.Navigation("District");
 

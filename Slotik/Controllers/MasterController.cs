@@ -85,7 +85,7 @@ public class MasterController : ControllerBase
     public async Task<IActionResult> Delete(int id)
     {
         var master = await _context.Masters.FindAsync(id);
-            if (master == null) return NotFound("Майстра не знайдено");
+            if (master == null) return NotFound("Technician not found");
 
         _context.Masters.Remove(master);
         await _context.SaveChangesAsync();

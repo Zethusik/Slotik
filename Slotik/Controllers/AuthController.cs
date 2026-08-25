@@ -73,7 +73,7 @@ namespace Slotik.Controllers
             if (exists) { return Conflict("User with the same Email already exists"); }
 
             user.Email = dto.Email.Trim().ToLowerInvariant();
-            if (dto.Role == Models.Enums.UserRole.Superadmin.ToString()) { return BadRequest("Cannot assign to superadmin"); }
+            if (dto.Role == Models.Enums.UserRole.Superadmin.ToString()) { return Conflict("Cannot assign to SuperAdmin"); }
 
             if (dto.Role == "Client")
             {
@@ -89,7 +89,7 @@ namespace Slotik.Controllers
             await _context.Users.AddAsync(user);
             await _context.SaveChangesAsync();
             var token = _tservice.GenerateToken(user.Email, user.Role.ToString());
-            return Ok(new {Token= token,Role=user.Role});
+            return Ok(new {Token= token,Role=user.Role.ToString()});
         }
 
         

@@ -47,6 +47,10 @@ namespace Slotik
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             builder.Services.AddScoped<TokenService>();
+            builder.Services.AddCors(o => o.AddPolicy("front", p =>
+                 p.WithOrigins("http://localhost:5173")
+                .AllowAnyHeader()
+                .AllowAnyMethod()));
 
             var app = builder.Build();
 
@@ -60,6 +64,7 @@ namespace Slotik
             app.UseHttpsRedirection();
 
             app.UseAuthorization();
+            app.UseCors();
 
             app.MapControllers();
 

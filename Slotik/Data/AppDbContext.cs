@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Slotik.Models;
+using Slotik.Models.Enums;
 
 namespace Slotik.Data;
 
@@ -28,6 +29,22 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<User>().HasData(
+           new User
+           {
+               Id = -1,
+               Name = "Super Admin",
+               Phone = "+380000000000",
+               Email = "superadmin@slotik.local",
+
+               // Password: SuperAdmin123!
+               PasswordHash = "d357150517d3e65ae84985f7b705ad99fdc38372a22ecea0cecaf8aaf820a249",
+
+               Role = UserRole.Superadmin,
+               TelegramChatId = null
+           }
+       );
 
         modelBuilder.Entity<Review>()
             .HasIndex(r => r.BookingId)

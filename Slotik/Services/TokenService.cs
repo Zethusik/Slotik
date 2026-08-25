@@ -12,7 +12,7 @@ namespace Slotik.Services
 
         public TokenService(IConfiguration config) => _config = config;
 
-        public string GenerateToken(string email, string role) 
+        public string GenerateToken(string email, string role)
         {
             var jwtsettings = _config.GetSection("JwtSettings");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtsettings["SecretKey"]));
@@ -37,7 +37,7 @@ namespace Slotik.Services
         }
 
         // hashing to SHA256 because MD5 outdated (may be changed in the future)
-        public string HashSHA256(string password) 
+        public string HashSHA256(string password)
         {
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password))).ToLowerInvariant();
         }

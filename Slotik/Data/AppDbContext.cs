@@ -26,9 +26,19 @@ public class AppDbContext : DbContext
     public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<Payment> Payments { get; set; }
 
+    public DbSet<PendingRegistration> PendingRegistrations { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<PendingRegistration>()
+            .HasIndex(x => x.Email)
+            .IsUnique();
+
+        modelBuilder.Entity<User>()
+            .HasIndex(x => x.Email)
+            .IsUnique();
 
         modelBuilder.Entity<User>().HasData(
            new User

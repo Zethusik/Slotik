@@ -57,6 +57,12 @@ public class Program
             .AllowAnyHeader()
             .AllowAnyMethod()));
 
+         builder.Services.Configure<SmtpSettings>(
+            builder.Configuration.GetSection("SmtpSettings"));
+
+        builder.Services.AddScoped<SmtpSettings>();
+        builder.Services.AddScoped<EmailService>();
+
         var app = builder.Build();
 
 

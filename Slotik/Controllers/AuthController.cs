@@ -18,14 +18,17 @@ namespace Slotik.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
+        
 
         private readonly AppDbContext _context;
         private readonly TokenService _tservice;
+        private readonly EmailService _eservice; // Email service with email token generating, hashing and sending logic
 
-        public AuthController(AppDbContext context,TokenService tservice)
+        public AuthController(AppDbContext context,TokenService tservice, EmailService eservice)
         {
             _context = context;
             _tservice = tservice;
+            _eservice = eservice;
         }
 
         [HttpPost("login")]
@@ -84,12 +87,78 @@ namespace Slotik.Controllers
                 user.Role = UserRole.Master;
             }
 
-            
+            var token = _eservice.GenerateEmailToken();
 
-            await _context.Users.AddAsync(user);
+            var pending = new PendingRegistration { 
+                Name = user.Name,
+                Email = user.Email,
+                Phone = user.Phone,
+                Role = user.Role,
+                PasswordHash = user.PasswordHash,
+                TokenHash = _eservice.HashToken(token),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(30)
+            };
+
+            var ispending =_context.PendingRegistrations.FirstOrDefault(p => p.Email == pending.Email);
+
+            if (ispending != null) 
+            {
+                _context.PendingRegistrations.Remove(ispending);
+                await _context.SaveChangesAsync();
+                return BadRequest("This Email is already on confirmation.");
+            }
+
+            await _context.PendingRegistrations.AddAsync(pending);
             await _context.SaveChangesAsync();
-            var token = _tservice.GenerateToken(user.Email, user.Role.ToString());
-            return Ok(new {Token= token,Role=user.Role.ToString()});
+
+            var confirmationLink =
+            $"https://localhost:7041/api/Auth/confirm?token={token}";
+
+            await _eservice.SendConfirmationEmailAsync(user.Email, confirmationLink);
+
+            return Ok("Check your Email for Email Confirmation link.");
+        }
+
+        [HttpGet("confirm")]
+        public async Task<ActionResult> ConfirmEmail([FromQuery] string token) 
+        {
+            if (string.IsNullOrEmpty(token)) { return BadRequest("Invalid token"); }
+            var tokenHash = _eservice.HashToken(token);
+
+            var pending = await _context.PendingRegistrations.FirstOrDefaultAsync(x => x.TokenHash == tokenHash);
+            if (pending == null) { return BadRequest("Link Expired or has Email has been already confirmed."); }
+
+            if (pending.ExpiresAt < DateTime.UtcNow) {
+            
+                _context.PendingRegistrations.Remove(pending);
+                await _context.SaveChangesAsync();
+
+                return BadRequest("Confirmation link Expired.");
+            }
+
+            var user = await _context.Users.AnyAsync(u => u.Email == pending.Email);
+
+            if (user)
+            {
+                _context.PendingRegistrations.Remove(pending);
+                await _context.SaveChangesAsync();
+                return BadRequest("User already exists with the same Email.");
+            }
+
+            var Auser = new User
+            {
+                Name = pending.Name,
+                Email = pending.Email,
+                Phone = pending.Phone,
+                PasswordHash = pending.PasswordHash,
+                Role = pending.Role,
+
+            };
+
+            _context.Users.Add(Auser);
+            _context.PendingRegistrations.Remove(pending);
+            await _context.SaveChangesAsync();
+            return Ok("Email confirmed! You can now log in.");
         }
 
         

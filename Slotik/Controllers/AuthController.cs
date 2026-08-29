@@ -140,8 +140,7 @@ namespace Slotik.Controllers
 
             if (user)
             {
-                _context.PendingRegistrations.Remove(pending);
-                await _context.SaveChangesAsync();
+               
                 return BadRequest("User already exists with the same Email.");
             }
 

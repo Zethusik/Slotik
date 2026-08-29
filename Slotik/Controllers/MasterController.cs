@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
@@ -18,6 +19,7 @@ public class MasterController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize]
     public async Task<IActionResult> GetAll()
     {
         var masters = await _context.Masters
@@ -29,6 +31,7 @@ public class MasterController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [Authorize]
     public async Task<IActionResult> GetById(int id)
     {
         var master = await _context.Masters
@@ -42,6 +45,7 @@ public class MasterController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateMasterDto dto)
     {
         var master = new Master
@@ -63,6 +67,7 @@ public class MasterController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize]
     public async Task<IActionResult> Update(int id, [FromBody] CreateMasterDto dto)
     {
         var master = await _context.Masters.FindAsync(id);
@@ -82,6 +87,7 @@ public class MasterController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize]
     public async Task<IActionResult> Delete(int id)
     {
         var master = await _context.Masters.FindAsync(id);

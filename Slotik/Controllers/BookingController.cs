@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
@@ -42,6 +43,7 @@ public class BookingController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Create([FromBody] CreateBookingDto dto)
     {
         var booking = new Booking
@@ -63,6 +65,7 @@ public class BookingController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Update(int id, [FromBody] CreateBookingDto dto)
     {
         var booking = await _context.Bookings.FindAsync(id);
@@ -82,6 +85,7 @@ public class BookingController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Delete(int id)
     {
         var booking = await _context.Bookings.FindAsync(id);

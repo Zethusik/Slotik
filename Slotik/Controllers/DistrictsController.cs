@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
@@ -38,6 +39,7 @@ public class DistrictsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Create([FromBody] CreateDistrictDto dto)
     {
         var district = new District
@@ -52,6 +54,7 @@ public class DistrictsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Update(int id, [FromBody] CreateDistrictDto dto)
     {
         var district = await _context.Districts.FindAsync(id);
@@ -65,6 +68,7 @@ public class DistrictsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Delete(int id)
     {
         var district = await _context.Districts.FindAsync(id);

@@ -71,7 +71,8 @@ namespace Slotik.Controllers
             }
             User sub = new User
             {
-                Name = dto.Name,
+                LastName = dto.LastName,
+                FirstName = dto.FirstName,
                 Email = dto.Email,
                 Phone = dto.Phone,
                 Role = role,
@@ -103,7 +104,8 @@ namespace Slotik.Controllers
             var subToChange = await _context.Users.FirstOrDefaultAsync(s => s.Id == id);
             if (subToChange == null) { return NotFound("User Not Found."); }
 
-            subToChange.Name = dto.Name;
+            subToChange.LastName = dto.LastName;
+            subToChange.FirstName = dto.FirstName;
             subToChange.Email = dto.Email;
             subToChange.PasswordHash = _tservice.HashSHA256(dto.Password);
             subToChange.Role = role;

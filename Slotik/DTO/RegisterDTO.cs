@@ -6,8 +6,11 @@ namespace Slotik.DTO
     public class RegisterDTO
     {
         // very cool feature i discovered here, just not to do checks in controller, very useful!
-        [Required(ErrorMessage = "Name is required")]
-        public string Name { get; set; } = String.Empty;
+        [Required(ErrorMessage = "FirstName is required")]
+        public string FirstName { get; set; } = String.Empty;
+
+        [Required(ErrorMessage = "LastName is required")]
+        public string LastName { get; set; } = String.Empty;
         [Required(ErrorMessage = "Phone is required")]
         public string Phone { get; set; } = String.Empty;
 

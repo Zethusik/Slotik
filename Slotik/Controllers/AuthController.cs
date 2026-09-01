@@ -37,7 +37,7 @@ namespace Slotik.Controllers
             var email = dto.Email;
             var password = dto.Password;
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _context.Users.Include(u=>u.Master).FirstOrDefaultAsync(u => u.Email == email);
 
             if (user == null) { return Unauthorized("Wrong Email or Password"); };
 
@@ -66,10 +66,8 @@ namespace Slotik.Controllers
 
             user.Phone = dto.Phone;
 
-            exists = await _context.Users.AnyAsync(u => u.Name == dto.Name);
-            if (exists) { return Conflict("User with the same Name already exists"); }
-
-            user.Name = dto.Name;
+            user.LastName = dto.LastName;
+            user.FirstName = dto.FirstName;
             user.PasswordHash = _tservice.HashSHA256(dto.Password);
 
             exists = await _context.Users.AnyAsync(u => u.Email == dto.Email.Trim().ToLowerInvariant());
@@ -90,7 +88,7 @@ namespace Slotik.Controllers
             var token = _eservice.GenerateEmailToken();
 
             var pending = new PendingRegistration { 
-                Name = user.Name,
+                FirstName = dto.FirstName, LastName = dto.LastName,
                 Email = user.Email,
                 Phone = user.Phone,
                 Role = user.Role,
@@ -116,7 +114,7 @@ namespace Slotik.Controllers
 
             await _eservice.SendConfirmationEmailAsync(user.Email, confirmationLink);
 
-            return Ok("Check your Email for Email Confirmation link.");
+            return Ok("Check your Email for Confirmation link.");
         }
 
         [HttpGet("confirm")]
@@ -146,7 +144,8 @@ namespace Slotik.Controllers
 
             var Auser = new User
             {
-                Name = pending.Name,
+                FirstName = pending.FirstName,
+                LastName = pending.LastName,
                 Email = pending.Email,
                 Phone = pending.Phone,
                 PasswordHash = pending.PasswordHash,

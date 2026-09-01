@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
@@ -33,6 +34,7 @@ public class DaysOffController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Create([FromBody] CreateDaysOffDto dto)
     {
         var dayOff = new DaysOff
@@ -48,6 +50,7 @@ public class DaysOffController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Update(int id, [FromBody] CreateDaysOffDto dto)
     {
         var dayOff = await _context.Set<DaysOff>().FindAsync(id);
@@ -62,6 +65,7 @@ public class DaysOffController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Delete(int id)
     {
         var dayOff = await _context.Set<DaysOff>().FindAsync(id);

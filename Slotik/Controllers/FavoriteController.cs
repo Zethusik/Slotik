@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
@@ -40,6 +41,7 @@ public class FavoriteController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Create([FromBody] CreateFavoriteDto dto)
     {
         var favorite = new Favorite
@@ -55,6 +57,7 @@ public class FavoriteController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Delete(int id)
     {
         var favorite = await _context.Set<Favorite>().FindAsync(id);

@@ -44,7 +44,8 @@ public class AppDbContext : DbContext
            new User
            {
                Id = -1,
-               Name = "Super Admin",
+               FirstName = "Super",
+               LastName = "Admin",
                Phone = "+380000000000",
                Email = "superadmin@slotik.local",
 

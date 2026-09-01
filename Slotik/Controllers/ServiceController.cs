@@ -21,7 +21,7 @@ namespace Slotik.Controllers
         }
 
         [HttpGet]
-        [Authorize]
+        
         public async Task<ActionResult> GetAll()
         {
             var service = await _context.Services.Include(s => s.Master).Include(s=>s.Photos).Include(s=>s.Bookings).ToListAsync();
@@ -29,7 +29,7 @@ namespace Slotik.Controllers
         }
 
         [HttpGet("{Id}")]
-        [Authorize]
+        
         public async Task<ActionResult> GetById(int id)
         {
             var service = await _context.Services.Include(s => s.Master).Include(s => s.Photos).Include(s => s.Bookings).FirstOrDefaultAsync(s => s.Id == id);
@@ -39,7 +39,7 @@ namespace Slotik.Controllers
         }
 
         [HttpDelete("{Id}")]
-        [Authorize]
+        [Authorize(Roles = "Superadmin")]
 
         public async Task<ActionResult> DeleteById(int Id)
         {
@@ -54,7 +54,7 @@ namespace Slotik.Controllers
         }
 
         [HttpPost]
-        [Authorize]
+        [Authorize(Roles = "Superadmin")]
         public async Task<ActionResult> Create([FromBody] CreateServiceDTO dto)
         {
             Service sub = new Service
@@ -72,7 +72,7 @@ namespace Slotik.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize]
+        [Authorize(Roles = "Superadmin")]
 
         public async Task<ActionResult> Update(int id, [FromBody] CreateServiceDTO dto)
         {

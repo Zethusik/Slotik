@@ -20,7 +20,7 @@ namespace Slotik.Controllers
         }
 
         [HttpGet]
-        [Authorize]
+        
         public async Task<ActionResult> GetAll()
         {
             var sphoto = await _context.ServicePhotos.Include(s => s.Service).ToListAsync();
@@ -28,7 +28,7 @@ namespace Slotik.Controllers
         }
 
         [HttpGet("{Id}")]
-        [Authorize]
+        
         public async Task<ActionResult> GetById(int id)
         {
             var sphoto = await  _context.ServicePhotos.Include(s => s.Service).FirstOrDefaultAsync(s => s.Id == id);
@@ -38,7 +38,7 @@ namespace Slotik.Controllers
         }
 
         [HttpDelete("{Id}")]
-        [Authorize]
+        [Authorize(Roles = "Superadmin")]
 
         public async Task<ActionResult> DeleteById(int Id)
         {
@@ -53,7 +53,7 @@ namespace Slotik.Controllers
         }
 
         [HttpPost]
-        [Authorize]
+        [Authorize(Roles = "Superadmin")]
         public async Task<ActionResult> Create([FromBody] CreateServicePhotoDTO dto)
         {
             ServicePhoto sub = new ServicePhoto
@@ -69,7 +69,7 @@ namespace Slotik.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize]
+        [Authorize(Roles = "Superadmin")]
 
         public async Task<ActionResult> Update(int id, [FromBody] CreateServicePhotoDTO dto)
         {

@@ -47,8 +47,6 @@ public class Program
                 options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
             });
 
-        
-
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
         builder.Services.AddScoped<TokenService>();
@@ -57,7 +55,7 @@ public class Program
             .AllowAnyHeader()
             .AllowAnyMethod()));
 
-         builder.Services.Configure<SmtpSettings>(
+        builder.Services.Configure<SmtpSettings>(
             builder.Configuration.GetSection("SmtpSettings"));
 
         builder.Services.AddScoped<SmtpSettings>();
@@ -65,18 +63,12 @@ public class Program
 
         var app = builder.Build();
 
-
         using (var scope = app.Services.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await context.Database.MigrateAsync();
 
-           
-
-            
-
-           
-
+            await DbInitializer.SeedDataAsync(context);
         }
 
         if (app.Environment.IsDevelopment())

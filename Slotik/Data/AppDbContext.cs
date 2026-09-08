@@ -40,23 +40,6 @@ public class AppDbContext : DbContext
             .HasIndex(x => x.Email)
             .IsUnique();
 
-        modelBuilder.Entity<User>().HasData(
-           new User
-           {
-               Id = -1,
-               FirstName = "Super",
-               LastName = "Admin",
-               Phone = "+380000000000",
-               Email = "superadmin@slotik.local",
-
-               // Password: SuperAdmin123!
-               PasswordHash = "d357150517d3e65ae84985f7b705ad99fdc38372a22ecea0cecaf8aaf820a249",
-
-               Role = UserRole.Superadmin,
-               TelegramChatId = null
-           }
-       );
-
         modelBuilder.Entity<Review>()
             .HasIndex(r => r.BookingId)
             .IsUnique();
@@ -84,7 +67,7 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         // ==========================================
-        //         МІСТА ТА РАЙОНІВ УКРАЇНИ
+        //         МІСТА ТА РАЙОНИ УКРАЇНИ
         // ==========================================
 
         modelBuilder.Entity<City>().HasData(

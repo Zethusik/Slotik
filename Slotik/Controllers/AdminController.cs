@@ -45,6 +45,43 @@ namespace Slotik.Controllers
             });
         }
 
+        [HttpGet("masters")]
+        public async Task<ActionResult> GetMasters()
+        {
+            var now = DateTimeOffset.UtcNow;
+
+            var masters = await _context.Masters
+                .Include(m => m.User)
+                .Include(m => m.Category)
+                .Include(m => m.District)
+                .Include(m => m.Subscriptions)
+                .Select(m => new
+                {
+                    id = m.Id.ToString(),
+                    avatarUrl = (string?)null,
+                    name = $"{m.User.FirstName} {m.User.LastName}".Trim(),
+                    category = m.Category.Name,
+                    rating = 5.0,
+                    locationLabel = m.District != null ? m.District.Name : "Null",
+                    clientsCount = _context.Bookings.Count(b => b.MasterId == m.Id),
+                    registeredAt = now.ToString("yyyy-MM-dd"),
+                    subscriptionExpiresAt = m.Subscriptions
+                        .OrderByDescending(s => s.ExpiresAt)
+                        .Select(s => (DateTimeOffset?)s.ExpiresAt)
+                        .FirstOrDefault(),
+                    plan = m.Subscriptions
+                        .OrderByDescending(s => s.ExpiresAt)
+                        .Select(s => s.Plan.ToString().ToLower())
+                        .FirstOrDefault() ?? "free",
+                    status = m.Subscriptions.Any(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > now)
+                        ? "active"
+                        : "expired"
+                })
+                .ToListAsync();
+
+            return Ok(masters);
+        }
+
         [HttpGet("finance")]
         public async Task<ActionResult<FinanceStatsDto>> GetFinanceStats()
         {

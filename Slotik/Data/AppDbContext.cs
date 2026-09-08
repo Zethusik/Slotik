@@ -25,6 +25,7 @@ public class AppDbContext : DbContext
     public DbSet<Favorite> Favorites { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<Payment> Payments { get; set; }
+    public DbSet<PendingReset> PendingResets { get; set; }
 
     public DbSet<PendingRegistration> PendingRegistrations { get; set; }
 

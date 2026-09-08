@@ -32,7 +32,7 @@ namespace Slotik.Services
             message.Body = new TextPart("html")
             {
                 Text = $"""
-                    <h2>Вітаємо у Slotik!</h2>
+                    <h2>Welcome to Slotik!</h2>
 
                     <p>
                         Confirm your Email to continue registration
@@ -41,6 +41,55 @@ namespace Slotik.Services
                     <p>
                         <a href="{confLink}">
                             Confirm email
+                        </a>
+                    </p>
+
+                    <p>
+                        Link Expires after 30 minutes
+                    </p>
+
+                    <p>
+                        if you dont know why did you got this message - just ignore it.
+                    </p>
+                    """
+            };
+
+            using var client = new SmtpClient();
+
+            client.CheckCertificateRevocation = false;
+
+            await client.ConnectAsync(
+                _settings.Host,
+                _settings.Port,
+                SecureSocketOptions.StartTls);
+
+            await client.AuthenticateAsync(_settings.Username, _settings.Password);
+            await client.SendAsync(message);
+            await client.DisconnectAsync(true);
+        }
+
+        public async Task SendConfirmationCodeAsync(string email, string codeLink)
+        {
+            var message = new MimeMessage();
+
+            message.From.Add(new MailboxAddress(_settings.FromName, _settings.FromEmail));
+
+            message.To.Add(MailboxAddress.Parse(email));
+
+            message.Subject = "Password Reset - Slotik";
+
+            message.Body = new TextPart("html")
+            {
+                Text = $"""
+                    <h2>Welcome to Slotik!</h2>
+
+                    <p>
+                        Reset your password by clicking on the link.
+                    </p>
+
+                    <p>
+                        <a href="{codeLink}">
+                            Reset Password
                         </a>
                     </p>
 

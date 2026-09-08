@@ -159,6 +159,88 @@ namespace Slotik.Controllers
             return Ok("Email confirmed! You can now log in.");
         }
 
-        
+        [HttpPost("forgotPassword")]
+        public async Task<ActionResult> sendCode([FromBody] PasswordRestoreDTOcs dto)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+
+            if (user == null) { return NotFound("No user with same mail address"); }
+
+            var token = _eservice.GenerateEmailToken();
+            PendingReset reset = new PendingReset
+            {
+                email = dto.Email,
+                codeHash = _eservice.HashToken(token),
+                codeExpiresAt = DateTime.UtcNow.AddMinutes(30),
+                
+            };
+
+            await _context.PendingResets.AddAsync(reset);
+            await _context.SaveChangesAsync();
+
+            await _eservice.SendConfirmationCodeAsync(dto.Email, $"https://localhost:7041/api/Auth/confirmReset?token={token}");
+
+            return Ok("Check your Email");
+
+        }
+
+        [HttpGet("confirmReset")]
+        public async Task<ActionResult> confirmResetPassword([FromQuery] string token)
+        {
+            if (String.IsNullOrEmpty(token)) { return BadRequest("Bad Token."); }
+            var hashedToken = _eservice.HashToken(token);
+
+            var reset = await _context.PendingResets.FirstOrDefaultAsync(r => r.codeHash == hashedToken);
+
+            if (reset == null) { return NotFound("Wrong token"); }
+
+            if (reset.codeExpiresAt < DateTime.UtcNow)
+            {
+
+                _context.PendingResets.Remove(reset);
+                await _context.SaveChangesAsync();
+
+                return BadRequest("Confirmation link Expired.");
+            }
+
+            var FinalToken = _eservice.GenerateEmailToken();
+
+            reset.finalTokenHash = _eservice.HashToken(FinalToken);
+            reset.finalExpiresAt = DateTime.UtcNow.AddMinutes(30);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Token = FinalToken });
+
+
+
+        }
+
+        [HttpPost("resetPassword")]
+        public async Task<ActionResult> resetPassword([FromBody] FinalResetDTO dto) 
+        {
+            var reset = await _context.PendingResets.FirstOrDefaultAsync(r=>r.finalTokenHash ==_eservice.HashToken(dto.Token));
+            if (reset == null) { return NotFound("Invalid Token"); }
+
+            if (reset.finalExpiresAt < DateTime.UtcNow)
+            {
+                _context.PendingResets.Remove(reset);
+                await _context.SaveChangesAsync();
+
+                return BadRequest("Token Expired.");
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u=>u.Email==reset.email);
+
+            if (user == null) { return BadRequest("User somehow deleted own account.");}
+
+            user.PasswordHash = _tservice.HashSHA256(dto.NewPassword);
+            await _context.SaveChangesAsync();
+
+            return Ok("Password Changed.");
+
+        }
+
+
+
     }
 }

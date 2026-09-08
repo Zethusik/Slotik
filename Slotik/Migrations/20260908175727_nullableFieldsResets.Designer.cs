@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Slotik.Data;
@@ -11,9 +12,11 @@ using Slotik.Data;
 namespace Slotik.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908175727_nullableFieldsResets")]
+    partial class nullableFieldsResets
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1185,6 +1188,18 @@ namespace Slotik.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = -1,
+                            Email = "superadmin@slotik.local",
+                            FirstName = "Super",
+                            LastName = "Admin",
+                            PasswordHash = "d357150517d3e65ae84985f7b705ad99fdc38372a22ecea0cecaf8aaf820a249",
+                            Phone = "+380000000000",
+                            Role = 2
+                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.Booking", b =>

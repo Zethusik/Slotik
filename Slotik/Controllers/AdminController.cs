@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
@@ -24,12 +24,13 @@ public class AdminController : ControllerBase
     public async Task<ActionResult<AdminStatsDto>> GetStats()
     {
         var now = DateTimeOffset.UtcNow;
+        var currentMonthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
 
         var mastersTotal = await _context.Masters.CountAsync();
         var clientsTotal = await _context.Users.CountAsync(u => u.Role == UserRole.Client);
         var bookingsTotal = await _context.Bookings.CountAsync();
         var revenueTotal = await _context.Payments
-            .Where(p => p.Status == PaymentStatus.Success)
+            .Where(p => p.Status == PaymentStatus.Success && p.PaidAt >= currentMonthStart)
             .SumAsync(p => (decimal?)p.Amount) ?? 0m;
 
         var activeSubs = await _context.Subscriptions

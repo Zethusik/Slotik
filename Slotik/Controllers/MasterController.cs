@@ -57,7 +57,9 @@ public class MasterController : ControllerBase
                 .FirstOrDefault() ?? "free",
             IsBlocked = m.IsBlocked,
             DistrictName = m.District.Name,
-            CreatedAt = m.User.CreatedAt
+            CreatedAt = m.User.CreatedAt,
+            AvatarUrl = null
+            
 
         }).ToListAsync();
 

@@ -42,7 +42,7 @@ public class MasterAdminDto
     public bool IsBlocked { get; set; }
     public string AvatarUrl { get; set; } = string.Empty;
     public string DistrictName {  get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 public class UpdateSubscriptionDto

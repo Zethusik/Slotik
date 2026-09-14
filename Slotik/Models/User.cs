@@ -17,5 +17,5 @@ public class User
     public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -112,7 +112,7 @@ public class AdminController : ControllerBase
         return Ok(cats);
     }
 
-    [HttpPatch("{id:int}visibility")]
+    [HttpPatch("{id:int}/visibility")]
 
     public async Task<ActionResult> ChangeVisibility(int id)
     {

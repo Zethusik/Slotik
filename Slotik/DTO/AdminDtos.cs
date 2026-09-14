@@ -39,6 +39,10 @@ public class MasterAdminDto
     public string Status { get; set; } = string.Empty;
     public DateTimeOffset? SubscriptionUntil { get; set; }
     public string Tariff { get; set; } = string.Empty;
+    public bool IsBlocked { get; set; }
+    public string AvatarUrl { get; set; } = string.Empty;
+    public string DistrictName {  get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
 }
 
 public class UpdateSubscriptionDto

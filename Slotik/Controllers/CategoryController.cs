@@ -21,15 +21,18 @@ public class CategoryController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetCategories()
     {
-        var categories = await _context.Categories
+        var categories = await _context.Categories.Where(c => c.IsHiddenFromCatalog != true)
             .Select(c => new
             {
                 id = c.Id,
                 name = c.Name,
                 icon = c.Icon,
-                mastersCount = _context.Masters.Count(m => m.CategoryId == c.Id)
+                
+                
             })
             .ToListAsync();
+
+        
 
         return Ok(categories);
     }
@@ -53,6 +56,8 @@ public class CategoryController : ControllerBase
 
         return Ok(category);
     }
+
+
 
     // PUT /api/Category/{id}
     [HttpPut("{id:int}")]
@@ -82,6 +87,28 @@ public class CategoryController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Category deleted successfully" });
+    }
+
+    [HttpGet("options")]
+    [Authorize (Roles = "Master")]
+    public async Task<ActionResult> GetOptions() 
+    {
+
+        var categories = await _context.Categories
+           .Select(c => new
+           {
+               id = c.Id,
+               name = c.Name,
+               icon = c.Icon,
+               
+
+           })
+           .ToListAsync();
+
+
+
+        return Ok(categories);
+
     }
 }
 

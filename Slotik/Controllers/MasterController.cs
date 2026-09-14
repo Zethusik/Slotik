@@ -54,7 +54,11 @@ public class MasterController : ControllerBase
             Tariff = m.Subscriptions
                 .OrderByDescending(s => s.ExpiresAt)
                 .Select(s => s.Plan.ToString().ToLower())
-                .FirstOrDefault() ?? "free"
+                .FirstOrDefault() ?? "free",
+            IsBlocked = m.IsBlocked,
+            DistrictName = m.District.Name,
+            CreatedAt = m.User.CreatedAt
+
         }).ToListAsync();
 
         if (!string.IsNullOrEmpty(status))

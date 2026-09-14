@@ -97,4 +97,57 @@ public class AdminController : ControllerBase
             DailyRevenue = dailyData
         });
     }
+
+    [HttpGet]
+    public async Task<ActionResult> Categories()
+    {
+        var cats = await _context.Categories.Select(c => new
+        {
+            id = c.Id,
+            name = c.Name,
+            icon = c.Icon,
+            mastersCount = _context.Masters.Count(m => m.CategoryId == c.Id),
+            IsHiddenFromCatalog = c.IsHiddenFromCatalog
+        }).ToListAsync();
+        return Ok(cats);
+    }
+
+    [HttpPatch("{id:int}visibility")]
+
+    public async Task<ActionResult> ChangeVisibility(int id)
+    {
+        var cat = await _context.Categories.FirstOrDefaultAsync(c => c.Id == id);
+
+        if (cat == null) { return NotFound("Not found category."); }
+
+        if (cat.Masters == null) { return BadRequest("This category have masters"); }
+
+        cat.IsHiddenFromCatalog = !cat.IsHiddenFromCatalog;
+        await _context.SaveChangesAsync();
+
+        return Ok("now value is " + cat.IsHiddenFromCatalog);
+    }
+
+    // GET /api/Master/{id}
+    [HttpGet("Master/{id:int}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var master = await _context.Masters.Where(m => m.Id == id)
+            .Include(m => m.User)
+            .Include(m => m.Category)
+            .Include(m => m.District)
+            .Include(m => m)
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (master == null) return NotFound(new { message = "Master not found" });
+        return Ok(master);
+    }
+
+
+
 }
+
+
+    
+
+

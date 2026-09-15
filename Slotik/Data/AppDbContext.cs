@@ -68,6 +68,112 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         // ==========================================
+        //         МАЙСТРИ З ФРІ ПЛАНОМ
+        // ==========================================
+
+
+        modelBuilder.Entity<User>().HasData(
+    new User
+    {
+        Id = 900001,
+        FirstName = "Майстер",
+        LastName = "Free1",
+        Phone = "+380000000001",
+        Email = "masterfree1@slotik.com",
+
+        PasswordHash = "2b5efdd05f1be04909fd37f788acae6a1b039f3be38dc39ea84c1f569be1fded", //Master123!
+
+        Role = UserRole.Master,
+
+        CreatedAt = new DateTimeOffset(
+            2026, 9, 15,
+            12, 0, 0,
+            TimeSpan.Zero)
+    },
+
+    new User
+    {
+        Id = 900002,
+        FirstName = "Майстер",
+        LastName = "Free2",
+        Phone = "+380000000002",
+        Email = "masterfree2@slotik.com",
+
+        PasswordHash = "2b5efdd05f1be04909fd37f788acae6a1b039f3be38dc39ea84c1f569be1fded",//Master123!
+
+        Role = UserRole.Master,
+
+        CreatedAt = new DateTimeOffset(
+            2026, 9, 15,
+            12, 0, 0,
+            TimeSpan.Zero)
+    }
+        
+);
+        modelBuilder.Entity<Master>().HasData(
+    new Master
+    {
+        Id = 900001,
+        UserId = 900001,
+
+        CategoryId = 1,
+        DistrictId = 1,
+
+        Slug = "master-free-1",
+        About = "Тестовий майстер з Free тарифом",
+        ExperienceYears = 3,
+        SlotStepMin = 30,
+        IsBlocked = false
+    },
+
+    new Master
+    {
+        Id = 900002,
+        UserId = 900002,
+
+        CategoryId = 1,
+        DistrictId = 1,
+
+        Slug = "master-free-2",
+        About = "Тестовий майстер з Free тарифом",
+        ExperienceYears = 5,
+        SlotStepMin = 30,
+        IsBlocked = false
+    }
+);
+
+        modelBuilder.Entity<Subscription>().HasData(
+    new Subscription
+    {
+        Id = 900001,
+        MasterId = 900001,
+
+        Plan = SubscriptionPlan.Free,
+        Status = SubscriptionStatus.Active,
+
+        ExpiresAt = new DateTimeOffset(
+            2099, 12, 31,
+            23, 59, 59,
+            TimeSpan.Zero)
+    },
+
+    new Subscription
+    {
+        Id = 900002,
+        MasterId = 900002,
+
+        Plan = SubscriptionPlan.Free,
+        Status = SubscriptionStatus.Active,
+
+        ExpiresAt = new DateTimeOffset(
+            2099, 12, 31,
+            23, 59, 59,
+            TimeSpan.Zero)
+    }
+);
+
+
+        // ==========================================
         //         МІСТА ТА РАЙОНИ УКРАЇНИ
         // ==========================================
 

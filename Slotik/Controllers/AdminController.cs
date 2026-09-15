@@ -143,13 +143,16 @@ public class AdminController : ControllerBase
         var m = await _context.Masters.Where(m => m.Id == id)
             .Include(m => m.User)
             .Include(m => m.Category)
+            .Include(m => m.Subscriptions)
             .Include(m => m.District)
+            .ThenInclude(d => d.City)
             .FirstOrDefaultAsync(m => m.Id == id);
 
         var activeSubscription = m.Subscriptions
-        //.Where(s =>
-        //s.Status == SubscriptionStatus.Active &&
-        //s.ExpiresAt > DateTimeOffset.UtcNow)
+        .Where(s =>
+            (s.Status == SubscriptionStatus.Active &&
+             s.ExpiresAt > DateTimeOffset.UtcNow)
+            || s.Plan == SubscriptionPlan.Free)
         .OrderByDescending(s => s.ExpiresAt)
         .FirstOrDefault();
 
@@ -169,10 +172,11 @@ public class AdminController : ControllerBase
                             s.Plan == SubscriptionPlan.Free)
                                 ? "infinity"
                                 : activeSubscription?.ExpiresAt.ToString("O"),
-            Tariff = m.Subscriptions
-                .OrderByDescending(s => s.ExpiresAt)
-                .Select(s => s.Plan.ToString().ToLower())
-                .FirstOrDefault() ?? "free",
+            Tariff = activeSubscription?
+            .Plan
+            .ToString()
+            .ToLower() ?? "free",
+
             IsBlocked = m.IsBlocked,
             AvatarUrl = null,  // to do avatar url upload logic
             DistrictName = m.District.Name,
@@ -190,6 +194,11 @@ public class AdminController : ControllerBase
 
 
         };
+
+        if (activeSubscription.Plan == SubscriptionPlan.Free) {
+            dto.BillingPeriod = null;
+            dto.SubscriptionUntil = null;
+        }
 
         if (m == null) return NotFound(new { message = "Master not found" });
 

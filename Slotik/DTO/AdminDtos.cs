@@ -1,4 +1,5 @@
-﻿using Slotik.Models.Enums;
+﻿using Slotik.Models;
+using Slotik.Models.Enums;
 
 namespace Slotik.DTO;
 
@@ -43,6 +44,35 @@ public class MasterAdminDto
     public string AvatarUrl { get; set; } = string.Empty;
     public string DistrictName {  get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
+}
+public class FullMasterDto
+{ 
+    public int Id { get; set; }
+    public string? FirstName { get; set; } = string.Empty;
+    public string? LastName { get; set; } = string.Empty;
+    public string? Category { get; set; } = string.Empty;
+    public string? City { get; set; } = string.Empty;
+    public string? Status { get; set; } = string.Empty;
+    public string? SubscriptionUntil { get; set; }
+    public string? Tariff { get; set; } = string.Empty;
+    public bool? IsBlocked { get; set; }
+    public string? AvatarUrl { get; set; } = string.Empty;
+    public string? DistrictName { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public string? slug {  get; set; } = string.Empty;
+    public string? Email { get; set; } = string.Empty;
+    public string? Phone { get; set; } = string.Empty ;
+
+    public int? TariffPrice { get; set; }
+
+    public string? Currency { get; set; } = "UAH";
+    public string? BillingPeriod { get; set; } = "month";
+
+    public string? nextPaymentAt { get; set; }
+    public int BookingsCount { get; set; }
+    public List<Payment> Payments { get; set; } = new List<Payment>();
+
 }
 
 public class UpdateSubscriptionDto

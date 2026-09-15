@@ -120,27 +120,82 @@ public class AdminController : ControllerBase
 
         if (cat == null) { return NotFound("Not found category."); }
 
-        if (cat.Masters == null) { return BadRequest("This category have masters"); }
+        if (await _context.Masters.AnyAsync(m=>m.CategoryId == id)) 
+        { 
+            cat.IsHiddenFromCatalog = false;
+            await _context.SaveChangesAsync();
+            return BadRequest("This category have masters"); 
+
+        }
 
         cat.IsHiddenFromCatalog = !cat.IsHiddenFromCatalog;
         await _context.SaveChangesAsync();
 
-        return Ok("now value is " + cat.IsHiddenFromCatalog);
+        return Ok(new {Id=id,IsHiddenFromCatalog = cat.IsHiddenFromCatalog });
     }
 
     // GET /api/Master/{id}
     [HttpGet("Master/{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var master = await _context.Masters.Where(m => m.Id == id)
+        
+
+        var m = await _context.Masters.Where(m => m.Id == id)
             .Include(m => m.User)
             .Include(m => m.Category)
             .Include(m => m.District)
-            .Include(m => m)
             .FirstOrDefaultAsync(m => m.Id == id);
 
-        if (master == null) return NotFound(new { message = "Master not found" });
-        return Ok(master);
+        var activeSubscription = m.Subscriptions
+        //.Where(s =>
+        //s.Status == SubscriptionStatus.Active &&
+        //s.ExpiresAt > DateTimeOffset.UtcNow)
+        .OrderByDescending(s => s.ExpiresAt)
+        .FirstOrDefault();
+
+        //if (activeSubscription == null) { return NotFound("not found subscription"); }
+
+        var dto = new FullMasterDto
+        {
+            Id = m.Id,
+            FirstName = m.User.FirstName,
+            LastName = m.User.LastName,
+            Category = m.Category.Name,
+            City = m.District?.City?.Name ?? "Unknown",
+            Status = m.Subscriptions.Any(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > DateTimeOffset.UtcNow || s.Plan == SubscriptionPlan.Free)
+                ? "active"
+                : "expired",
+            SubscriptionUntil = m.Subscriptions.Any(s =>
+                            s.Plan == SubscriptionPlan.Free)
+                                ? "infinity"
+                                : activeSubscription?.ExpiresAt.ToString("O"),
+            Tariff = m.Subscriptions
+                .OrderByDescending(s => s.ExpiresAt)
+                .Select(s => s.Plan.ToString().ToLower())
+                .FirstOrDefault() ?? "free",
+            IsBlocked = m.IsBlocked,
+            AvatarUrl = null,  // to do avatar url upload logic
+            DistrictName = m.District.Name,
+            CreatedAt = m.User.CreatedAt,
+            slug = m.Slug,
+            Email = m.User.Email,
+            Phone = m.User.Phone,
+            TariffPrice = 0,  // no pricing yet and no payments logic
+            nextPaymentAt = null, // no payments logic too
+            BookingsCount = 0, // no bookings logic yet
+
+
+
+
+
+
+        };
+
+        if (m == null) return NotFound(new { message = "Master not found" });
+
+        return Ok(dto);
+        
+
     }
 
 

@@ -44,7 +44,7 @@ public class MasterController : ControllerBase
             LastName = m.User.LastName,
             Category = m.Category.Name,
             City = m.District != null && m.District.City != null ? m.District.City.Name : "Kyiv",
-            Status = m.Subscriptions.Any(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > now)
+            Status = m.Subscriptions.Any(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > now || s.Plan == SubscriptionPlan.Free)
                 ? "active"
                 : "expired",
             SubscriptionUntil = m.Subscriptions

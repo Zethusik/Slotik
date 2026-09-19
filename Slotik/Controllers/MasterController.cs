@@ -37,6 +37,8 @@ public class MasterController : ControllerBase
             query = query.Where(m => m.CategoryId == categoryId.Value);
         }
 
+       
+
         var list = await query.Select(m => new MasterAdminDto
         {
             Id = m.Id,
@@ -44,9 +46,7 @@ public class MasterController : ControllerBase
             LastName = m.User.LastName,
             Category = m.Category.Name,
             City = m.District != null && m.District.City != null ? m.District.City.Name : "Kyiv",
-            Status = m.Subscriptions.Any(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > now || s.Plan == SubscriptionPlan.Free)
-                ? "active"
-                : "expired",
+            Status = "Active",
             SubscriptionUntil = m.Subscriptions
                 .OrderByDescending(s => s.ExpiresAt)
                 .Select(s => (DateTimeOffset?)s.ExpiresAt)
@@ -164,11 +164,11 @@ public class MasterController : ControllerBase
         var master = await _context.Masters.Include(m => m.Subscriptions).FirstOrDefaultAsync(m => m.Id == id);
         if (master == null) return NotFound(new { message = "Master not found" });
 
-        var activeSubs = master.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).ToList();
-        foreach (var sub in activeSubs)
-        {
-            sub.Status = SubscriptionStatus.Cancelled;
-        }
+        //var activeSubs = master.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).ToList();
+        //foreach (var sub in activeSubs)
+        //{
+        //    sub.Status = SubscriptionStatus.Cancelled;
+        //}
 
         master.IsBlocked = !master.IsBlocked;
 

@@ -166,7 +166,7 @@ public class AppDbContext : DbContext
         Status = SubscriptionStatus.Active,
 
         ExpiresAt = new DateTimeOffset(
-            2099, 12, 31,
+            2026, 9, 20,
             23, 59, 59,
             TimeSpan.Zero)
     }

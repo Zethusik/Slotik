@@ -150,9 +150,9 @@ public class AdminController : ControllerBase
 
         var activeSubscription = m.Subscriptions
         .Where(s =>
-            (s.Status == SubscriptionStatus.Active &&
-             s.ExpiresAt > DateTimeOffset.UtcNow)
-            || s.Plan == SubscriptionPlan.Free)
+             s.Status == SubscriptionStatus.Active &&
+             s.ExpiresAt > DateTimeOffset.UtcNow &&
+             s.Plan != SubscriptionPlan.Free)
         .OrderByDescending(s => s.ExpiresAt)
         .FirstOrDefault();
 
@@ -165,17 +165,14 @@ public class AdminController : ControllerBase
             LastName = m.User.LastName,
             Category = m.Category.Name,
             City = m.District?.City?.Name ?? "Unknown",
-            Status = m.Subscriptions.Any(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > DateTimeOffset.UtcNow || s.Plan == SubscriptionPlan.Free)
-                ? "active"
-                : "expired",
-            SubscriptionUntil = m.Subscriptions.Any(s =>
-                            s.Plan == SubscriptionPlan.Free)
-                                ? "infinity"
-                                : activeSubscription?.ExpiresAt.ToString("O"),
-            Tariff = activeSubscription?
-            .Plan
-            .ToString()
-            .ToLower() ?? "free",
+            Status = "Active",
+            SubscriptionUntil = activeSubscription != null
+        ? activeSubscription.ExpiresAt.ToString("O")
+        : null,
+            Tariff = activeSubscription != null
+            ? activeSubscription.Plan.ToString().ToLower() : null,
+
+
 
             IsBlocked = m.IsBlocked,
             AvatarUrl = null,  // to do avatar url upload logic
@@ -195,7 +192,7 @@ public class AdminController : ControllerBase
 
         };
 
-        if (activeSubscription.Plan == SubscriptionPlan.Free) {
+        if (activeSubscription == null) {
             dto.BillingPeriod = null;
             dto.SubscriptionUntil = null;
         }

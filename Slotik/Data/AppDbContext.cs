@@ -172,6 +172,236 @@ public class AppDbContext : DbContext
     }
 );
 
+        // =========================
+        // TEST CLIENTS
+        // =========================
+
+        modelBuilder.Entity<User>().HasData(
+            new User
+            {
+                Id = 910001,
+                FirstName = "Олександр",
+                LastName = "Клієнт",
+                Phone = "+380501110001",
+                Email = "client1@slotik.test",
+
+                // Password: Client123!
+                PasswordHash = "598e94d875ce2d6f38c297129b5c059afe1b4f6590682b19e27c3deecf6c4140",
+
+                Role = UserRole.Client,
+
+                CreatedAt = new DateTimeOffset(
+                    2026, 7, 1,
+                    10, 0, 0,
+                    TimeSpan.Zero)
+            },
+
+            new User
+            {
+                Id = 910002,
+                FirstName = "Марія",
+                LastName = "Клієнт",
+                Phone = "+380501110002",
+                Email = "client2@slotik.test",
+
+                // Password: Client123!
+                PasswordHash = "598e94d875ce2d6f38c297129b5c059afe1b4f6590682b19e27c3deecf6c4140",
+
+                Role = UserRole.Client,
+
+                CreatedAt = new DateTimeOffset(
+                    2026, 7, 5,
+                    10, 0, 0,
+                    TimeSpan.Zero)
+            },
+
+            new User
+            {
+                Id = 910003,
+                FirstName = "Іван",
+                LastName = "Клієнт",
+                Phone = "+380501110003",
+                Email = "client3@slotik.test",
+
+                // Password: Client123!
+                PasswordHash = "598e94d875ce2d6f38c297129b5c059afe1b4f6590682b19e27c3deecf6c4140",
+
+                Role = UserRole.Client,
+
+                CreatedAt = new DateTimeOffset(
+                    2026, 8, 1,
+                    10, 0, 0,
+                    TimeSpan.Zero)
+            }
+        );
+
+
+        // =========================
+        // TEST SERVICE
+        // =========================
+
+        modelBuilder.Entity<Service>().HasData(
+            new Service
+            {
+                Id = 920001,
+
+                MasterId = 900001,
+
+                Name = "Тестова послуга",
+                DurationMin = 60,
+                Price = 800m,
+
+                Description = "Тестова послуга для перевірки записів майстра.",
+                Included = "Консультація та виконання послуги"
+            }
+        );
+
+
+        // =========================
+        // BOOKINGS
+        // =========================
+
+        modelBuilder.Entity<Booking>().HasData(
+
+            // ---------------------------------
+            // CLIENT 1 — VISITED MASTER TWICE
+            // ---------------------------------
+
+            new Booking
+            {
+                Id = 930001,
+
+                UserId = 910001,
+                MasterId = 900001,
+                ServiceId = 920001,
+
+                StartsAt = new DateTimeOffset(
+                    2026, 8, 10,
+                    10, 0, 0,
+                    TimeSpan.Zero),
+
+                EndsAt = new DateTimeOffset(
+                    2026, 8, 10,
+                    11, 0, 0,
+                    TimeSpan.Zero),
+
+                Status = BookingStatus.Completed,
+
+                Comment = "Перший завершений запис клієнта.",
+                ReminderSent = true
+            },
+
+            new Booking
+            {
+                Id = 930002,
+
+                UserId = 910001,
+                MasterId = 900001,
+                ServiceId = 920001,
+
+                StartsAt = new DateTimeOffset(
+                    2026, 9, 5,
+                    14, 0, 0,
+                    TimeSpan.Zero),
+
+                EndsAt = new DateTimeOffset(
+                    2026, 9, 5,
+                    15, 0, 0,
+                    TimeSpan.Zero),
+
+                Status = BookingStatus.Completed,
+
+                Comment = "Другий завершений запис того самого клієнта.",
+                ReminderSent = true
+            },
+
+
+            // ---------------------------------
+            // CLIENT 2 — CANCELLED ONLY
+            // ---------------------------------
+
+            new Booking
+            {
+                Id = 930003,
+
+                UserId = 910002,
+                MasterId = 900001,
+                ServiceId = 920001,
+
+                StartsAt = new DateTimeOffset(
+                    2026, 9, 12,
+                    12, 0, 0,
+                    TimeSpan.Zero),
+
+                EndsAt = new DateTimeOffset(
+                    2026, 9, 12,
+                    13, 0, 0,
+                    TimeSpan.Zero),
+
+                Status = BookingStatus.Cancelled,
+
+                Comment = "Клієнт скасував запис.",
+                ReminderSent = false
+            },
+
+
+            // ---------------------------------
+            // CLIENT 3 — FUTURE BOOKING
+            // ---------------------------------
+
+            new Booking
+            {
+                Id = 930004,
+
+                UserId = 910003,
+                MasterId = 900001,
+                ServiceId = 920001,
+
+                StartsAt = new DateTimeOffset(
+                    2027, 1, 15,
+                    11, 0, 0,
+                    TimeSpan.Zero),
+
+                EndsAt = new DateTimeOffset(
+                    2027, 1, 15,
+                    12, 0, 0,
+                    TimeSpan.Zero),
+
+                Status = BookingStatus.Confirmed,
+
+                Comment = "Майбутній підтверджений запис.",
+                ReminderSent = false
+            }
+        );
+
+
+        // =========================
+        // REVIEWS
+        // =========================
+
+        modelBuilder.Entity<Review>().HasData(
+
+            new Review
+            {
+                Id = 940001,
+
+                BookingId = 930001,
+
+                Rating = 5,
+                Text = "Все дуже сподобалось."
+            },
+
+            new Review
+            {
+                Id = 940002,
+
+                BookingId = 930002,
+
+                Rating = 4,
+                Text = "Хороший майстер, прийду ще."
+            }
+        );
+
 
         // ==========================================
         //         МІСТА ТА РАЙОНИ УКРАЇНИ

@@ -31,6 +31,7 @@ public class MasterController : ControllerBase
                 .ThenInclude(d => d.City)
             .Include(m => m.Subscriptions)
             .Include(m => m.Bookings)
+            .ThenInclude(m=> m.Review)
             .AsQueryable();
 
         if (categoryId.HasValue)
@@ -65,10 +66,14 @@ public class MasterController : ControllerBase
                 DistrictName = m.District?.Name ?? string.Empty,
                 CreatedAt = m.User.CreatedAt,
                 AvatarUrl = string.Empty,
+                
 
                 Slug = m.Slug,
-                Rating = null,
-                ClientsCount = m.Bookings.Select(b => b.UserId).Distinct().Count()
+                Rating = m.Bookings
+                            .Where(b => b.Review != null)
+                            .Select(b => (double?)b.Review!.Rating)
+                            .Average() ?? 0,
+                ClientsCount = m.Bookings.Where(b=> b.Status == BookingStatus.Completed).Select(b => b.UserId).Distinct().Count()
             };
         }).ToList();
 
@@ -238,7 +243,7 @@ public class MasterController : ControllerBase
                 UserId = user.Id,
                 CategoryId = category.Id,
                 DistrictId = district?.Id ?? 1,
-                Slug = "test-master-1m",
+                Slug = "test-master-10m",
                 ExperienceYears = 1,
                 SlotStepMin = 1
             };

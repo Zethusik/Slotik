@@ -170,7 +170,7 @@ public class AdminController : ControllerBase
         ? activeSubscription.ExpiresAt.ToString("O")
         : null,
             Tariff = activeSubscription != null
-            ? activeSubscription.Plan.ToString().ToLower() : null,
+            ? activeSubscription.Plan.ToString().ToLower() : "Free",
 
 
 
@@ -184,6 +184,7 @@ public class AdminController : ControllerBase
             TariffPrice = 0,  // no pricing yet and no payments logic
             nextPaymentAt = null, // no payments logic too
             BookingsCount = 0, // no bookings logic yet
+            
 
 
 

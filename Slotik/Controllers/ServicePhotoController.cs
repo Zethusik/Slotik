@@ -14,40 +14,54 @@ namespace Slotik.Controllers
     {
         private readonly AppDbContext _context;
 
-        public ServicePhotoController (AppDbContext context)
+        public ServicePhotoController(AppDbContext context)
         {
             _context = context;
         }
 
+        // GET /api/ServicePhoto?masterId=10
         [HttpGet]
-        
-        public async Task<ActionResult> GetAll()
+        public async Task<ActionResult> GetAll([FromQuery] int? masterId)
         {
-            var sphoto = await _context.ServicePhotos.Include(s => s.Service).ToListAsync();
-            return Ok(sphoto);
+            var query = _context.ServicePhotos
+                .Include(s => s.Service)
+                .AsQueryable();
+
+            if (masterId.HasValue)
+            {
+                query = query.Where(p => p.Service.MasterId == masterId.Value);
+            }
+
+            var photos = await query.Select(p => new
+            {
+                id = p.Id,
+                serviceId = p.ServiceId,
+                photoUrl = p.PhotoUrl,
+                sortOrder = 0 // Добавлено поле sortOrder по требованию фронтенда
+            }).ToListAsync();
+
+            return Ok(photos);
         }
 
-        [HttpGet("{Id}")]
-        
+        [HttpGet("{id:int}")]
         public async Task<ActionResult> GetById(int id)
         {
-            var sphoto = await  _context.ServicePhotos.Include(s => s.Service).FirstOrDefaultAsync(s => s.Id == id);
+            var sphoto = await _context.ServicePhotos.Include(s => s.Service).FirstOrDefaultAsync(s => s.Id == id);
             if (sphoto == null) { return NotFound("Service Photo Not Found."); }
 
             return Ok(sphoto);
         }
 
-        [HttpDelete("{Id}")]
+        [HttpDelete("{id:int}")]
         [Authorize(Roles = "Superadmin")]
-
-        public async Task<ActionResult> DeleteById(int Id)
+        public async Task<ActionResult> DeleteById(int id)
         {
-            var sphoto = await _context.ServicePhotos.FirstOrDefaultAsync(s => s.Id == Id);
+            var sphoto = await _context.ServicePhotos.FirstOrDefaultAsync(s => s.Id == id);
 
             if (sphoto == null) { return NotFound("Service Photo Not Found."); }
 
             _context.ServicePhotos.Remove(sphoto);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return Ok("Service Photo is deleted");
         }
@@ -60,7 +74,6 @@ namespace Slotik.Controllers
             {
                 ServiceId = dto.ServiceId,
                 PhotoUrl = dto.PhotoUrl,
-
             };
 
             _context.ServicePhotos.Add(sub);
@@ -68,9 +81,8 @@ namespace Slotik.Controllers
             return Ok(sub);
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         [Authorize(Roles = "Superadmin")]
-
         public async Task<ActionResult> Update(int id, [FromBody] CreateServicePhotoDTO dto)
         {
             var sphotoToChange = await _context.ServicePhotos.FirstOrDefaultAsync(s => s.Id == id);
@@ -79,7 +91,7 @@ namespace Slotik.Controllers
             sphotoToChange.ServiceId = dto.ServiceId;
             sphotoToChange.PhotoUrl = dto.PhotoUrl;
 
-             await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
             return Ok(sphotoToChange);
         }

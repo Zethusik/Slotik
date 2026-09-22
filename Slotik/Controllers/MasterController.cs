@@ -19,7 +19,7 @@ public class MasterController : ControllerBase
         _context = context;
     }
 
-    // GET /api/Master?status=expired&categoryId=3
+    // GET /api/Master?status=active&categoryId=3
     [HttpGet]
     public async Task<IActionResult> GetMasters([FromQuery] string? status, [FromQuery] int? categoryId)
     {
@@ -30,6 +30,7 @@ public class MasterController : ControllerBase
             .Include(m => m.District)
                 .ThenInclude(d => d.City)
             .Include(m => m.Subscriptions)
+            .Include(m => m.Bookings)
             .AsQueryable();
 
         if (categoryId.HasValue)
@@ -37,31 +38,40 @@ public class MasterController : ControllerBase
             query = query.Where(m => m.CategoryId == categoryId.Value);
         }
 
-       
+        var mastersList = await query.ToListAsync();
 
-        var list = await query.Select(m => new MasterAdminDto
+        var list = mastersList.Select(m =>
         {
-            Id = m.Id,
-            FirstName = m.User.FirstName,
-            LastName = m.User.LastName,
-            Category = m.Category.Name,
-            City = m.District != null && m.District.City != null ? m.District.City.Name : "Kyiv",
-            Status = "Active",
-            SubscriptionUntil = m.Subscriptions
+            var activeSub = m.Subscriptions
+                .Where(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > now && s.Plan != SubscriptionPlan.Free)
                 .OrderByDescending(s => s.ExpiresAt)
-                .Select(s => (DateTimeOffset?)s.ExpiresAt)
-                .FirstOrDefault(),
-            Tariff = m.Subscriptions
-                .OrderByDescending(s => s.ExpiresAt)
-                .Select(s => s.Plan.ToString().ToLower())
-                .FirstOrDefault() ?? "free",
-            IsBlocked = m.IsBlocked,
-            DistrictName = m.District.Name,
-            CreatedAt = m.User.CreatedAt,
-            AvatarUrl = null
-            
+                .FirstOrDefault();
 
-        }).ToListAsync();
+            var isBlocked = m.IsBlocked;
+            var currentStatus = isBlocked ? "blocked" : "active";
+            var currentTariff = activeSub != null ? activeSub.Plan.ToString().ToLower() : "free";
+
+            return new MasterAdminDto
+            {
+                Id = m.Id,
+                FirstName = m.User.FirstName,
+                LastName = m.User.LastName,
+                Category = m.Category.Name,
+                City = m.District?.City?.Name ?? "Kyiv",
+                Status = currentStatus,
+                SubscriptionUntil = activeSub != null ? activeSub.ExpiresAt : null, // null для free!
+                Tariff = currentTariff,
+                IsBlocked = m.IsBlocked,
+                DistrictName = m.District?.Name ?? string.Empty,
+                CreatedAt = m.User.CreatedAt,
+                AvatarUrl = string.Empty,
+
+                // Новые поля:
+                Slug = m.Slug,
+                Rating = null, // Рейтинг (null если нет отзывов)
+                ClientsCount = m.Bookings.Select(b => b.UserId).Distinct().Count() // уникальные клиенты
+            };
+        }).ToList();
 
         if (!string.IsNullOrEmpty(status))
         {
@@ -104,6 +114,12 @@ public class MasterController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateMasterDto dto)
     {
+        var exists = await _context.Masters.AnyAsync(m => m.UserId == dto.UserId);
+        if (exists)
+        {
+            return BadRequest(new { message = "Мастер для этого пользователя уже создан" });
+        }
+
         var master = new Master
         {
             UserId = dto.UserId,
@@ -164,12 +180,6 @@ public class MasterController : ControllerBase
         var master = await _context.Masters.Include(m => m.Subscriptions).FirstOrDefaultAsync(m => m.Id == id);
         if (master == null) return NotFound(new { message = "Master not found" });
 
-        //var activeSubs = master.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).ToList();
-        //foreach (var sub in activeSubs)
-        //{
-        //    sub.Status = SubscriptionStatus.Cancelled;
-        //}
-
         master.IsBlocked = !master.IsBlocked;
 
         await _context.SaveChangesAsync();
@@ -196,5 +206,65 @@ public class MasterController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(newSub);
+    }
+
+    // Test button 10m for test
+    [HttpPost("test-seed/expire-in-10m")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CreateTestMasterWith10mSub()
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "test10m@slotik.com");
+        if (user == null)
+        {
+            user = new User
+            {
+                FirstName = "Test",
+                LastName = "10m",
+                Email = "test10m@slotik.com",
+                PasswordHash = "hashed_password",
+                Role = UserRole.Master
+            };
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+        }
+
+        var category = await _context.Categories.FirstOrDefaultAsync() ?? new Category { Name = "Test" };
+        var district = await _context.Districts.FirstOrDefaultAsync();
+
+        var master = await _context.Masters.Include(m => m.Subscriptions).FirstOrDefaultAsync(m => m.UserId == user.Id);
+        if (master == null)
+        {
+            master = new Master
+            {
+                UserId = user.Id,
+                CategoryId = category.Id,
+                DistrictId = district?.Id ?? 1,
+                Slug = "test-master-10m",
+                ExperienceYears = 1,
+                SlotStepMin = 1
+            };
+            _context.Masters.Add(master);
+            await _context.SaveChangesAsync();
+        }
+
+        var sub = new Models.Subscription
+        {
+            MasterId = master.Id,
+            Plan = SubscriptionPlan.Pro,
+            Status = SubscriptionStatus.Active,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
+        };
+
+        _context.Subscriptions.Add(sub);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "ok",
+            masterId = master.Id,
+            slug = master.Slug,
+            tariff = "pro",
+            subscriptionUntil = sub.ExpiresAt
+        });
     }
 }

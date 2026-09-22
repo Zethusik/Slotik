@@ -19,7 +19,6 @@ namespace Slotik.Data
                     LastName = "Admin",
                     Phone = "+380000000000",
                     Email = "superadmin@slotik.local",
-                    // SuperAdmin123!
                     PasswordHash = "d357150517d3e65ae84985f7b705ad99fdc38372a22ecea0cecaf8aaf820a249",
                     Role = UserRole.Superadmin
                 };
@@ -88,6 +87,70 @@ namespace Slotik.Data
                     PaidAt = DateTimeOffset.UtcNow.AddDays(-i)
                 });
             }
+
+            // 2. СЦЕНАРИЙ 1 : Незаблокированный мастер с подпиской на 27 ЧАСОВ
+            var user27 = new User
+            {
+                FirstName = "Master",
+                LastName = "27h",
+                Email = "master27h@slotik.com",
+                PasswordHash = "hashed_password",
+                Role = UserRole.Master
+            };
+            context.Users.Add(user27);
+            await context.SaveChangesAsync();
+
+            var master27 = new Master
+            {
+                UserId = user27.Id,
+                CategoryId = cat1.Id,
+                DistrictId = district.Id,
+                Slug = "master-27hours",
+                ExperienceYears = 3,
+                SlotStepMin = 30
+            };
+            context.Masters.Add(master27);
+            await context.SaveChangesAsync();
+
+            context.Subscriptions.Add(new Subscription
+            {
+                MasterId = master27.Id,
+                Plan = SubscriptionPlan.Pro,
+                Status = SubscriptionStatus.Active,
+                ExpiresAt = DateTimeOffset.UtcNow.AddHours(27)
+            });
+
+            // 3. СЦЕНАРИЙ 2 : Мастер с ИСТЕКШЕЙ платной подпиской (переход на Free)
+            var userExpired = new User
+            {
+                FirstName = "MAster",
+                LastName = "test2",
+                Email = "masterexpired@slotik.com",
+                PasswordHash = "hashed_password",
+                Role = UserRole.Master
+            };
+            context.Users.Add(userExpired);
+            await context.SaveChangesAsync();
+
+            var masterExpired = new Master
+            {
+                UserId = userExpired.Id,
+                CategoryId = cat2.Id,
+                DistrictId = district.Id,
+                Slug = "master-expired-to-free",
+                ExperienceYears = 4,
+                SlotStepMin = 30
+            };
+            context.Masters.Add(masterExpired);
+            await context.SaveChangesAsync();
+
+            context.Subscriptions.Add(new Subscription
+            {
+                MasterId = masterExpired.Id,
+                Plan = SubscriptionPlan.Basic,
+                Status = SubscriptionStatus.Active,
+                ExpiresAt = DateTimeOffset.UtcNow.AddDays(-2) // End 2d
+            });
 
             for (int i = 1; i <= 15; i++)
             {

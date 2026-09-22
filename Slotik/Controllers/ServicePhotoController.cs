@@ -37,7 +37,7 @@ namespace Slotik.Controllers
                 id = p.Id,
                 serviceId = p.ServiceId,
                 photoUrl = p.PhotoUrl,
-                sortOrder = 0 // Добавлено поле sortOrder по требованию фронтенда
+                sortOrder = 0
             }).ToListAsync();
 
             return Ok(photos);

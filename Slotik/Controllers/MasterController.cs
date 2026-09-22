@@ -59,17 +59,16 @@ public class MasterController : ControllerBase
                 Category = m.Category.Name,
                 City = m.District?.City?.Name ?? "Kyiv",
                 Status = currentStatus,
-                SubscriptionUntil = activeSub != null ? activeSub.ExpiresAt : null, // null для free!
+                SubscriptionUntil = activeSub != null ? activeSub.ExpiresAt : null,
                 Tariff = currentTariff,
                 IsBlocked = m.IsBlocked,
                 DistrictName = m.District?.Name ?? string.Empty,
                 CreatedAt = m.User.CreatedAt,
                 AvatarUrl = string.Empty,
 
-                // Новые поля:
                 Slug = m.Slug,
-                Rating = null, // Рейтинг (null если нет отзывов)
-                ClientsCount = m.Bookings.Select(b => b.UserId).Distinct().Count() // уникальные клиенты
+                Rating = null,
+                ClientsCount = m.Bookings.Select(b => b.UserId).Distinct().Count()
             };
         }).ToList();
 
@@ -213,13 +212,13 @@ public class MasterController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> CreateTestMasterWith10mSub()
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "test10m@slotik.com");
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "test1m@slotik.com");
         if (user == null)
         {
             user = new User
             {
                 FirstName = "Test",
-                LastName = "10m",
+                LastName = "1m",
                 Email = "test10m@slotik.com",
                 PasswordHash = "hashed_password",
                 Role = UserRole.Master
@@ -239,7 +238,7 @@ public class MasterController : ControllerBase
                 UserId = user.Id,
                 CategoryId = category.Id,
                 DistrictId = district?.Id ?? 1,
-                Slug = "test-master-10m",
+                Slug = "test-master-1m",
                 ExperienceYears = 1,
                 SlotStepMin = 1
             };

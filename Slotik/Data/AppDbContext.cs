@@ -162,11 +162,11 @@ public class AppDbContext : DbContext
         Id = 900002,
         MasterId = 900002,
 
-        Plan = SubscriptionPlan.Free,
+        Plan = SubscriptionPlan.Pro,
         Status = SubscriptionStatus.Active,
 
         ExpiresAt = new DateTimeOffset(
-            2026, 9, 20,
+            2026, 9, 24,
             23, 59, 59,
             TimeSpan.Zero)
     }

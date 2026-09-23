@@ -138,8 +138,8 @@ public class AdminController : ControllerBase
     [HttpGet("Master/{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
-        
 
+       
         var m = await _context.Masters.Where(m => m.Id == id)
             .Include(m => m.User)
             .Include(m => m.Category)
@@ -156,6 +156,11 @@ public class AdminController : ControllerBase
         .OrderByDescending(s => s.ExpiresAt)
         .FirstOrDefault();
 
+        var isBlocked = m.IsBlocked;
+        var currentStatus = isBlocked ? "blocked" : "active";
+
+        var currentTariff = activeSubscription != null ? activeSubscription.Plan.ToString().ToLower() : "free";
+
         //if (activeSubscription == null) { return NotFound("not found subscription"); }
 
         var dto = new FullMasterDto
@@ -165,12 +170,11 @@ public class AdminController : ControllerBase
             LastName = m.User.LastName,
             Category = m.Category.Name,
             City = m.District?.City?.Name ?? "Unknown",
-            Status = "Active",
+            Status = currentStatus,
             SubscriptionUntil = activeSubscription != null
         ? activeSubscription.ExpiresAt.ToString("O")
         : null,
-            Tariff = activeSubscription != null
-            ? activeSubscription.Plan.ToString().ToLower() : "Free",
+            Tariff = currentTariff,
 
 
 
@@ -183,7 +187,8 @@ public class AdminController : ControllerBase
             Phone = m.User.Phone,
             TariffPrice = 0,  // no pricing yet and no payments logic
             nextPaymentAt = null, // no payments logic too
-            BookingsCount = 0, // no bookings logic yet
+            BookingsCount = m.Bookings.Select(b => b.UserId).Distinct().Count(), // no bookings logic yet
+            
             
 
 

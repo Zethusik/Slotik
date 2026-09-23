@@ -50,7 +50,7 @@ public class MasterController : ControllerBase
 
             var isBlocked = m.IsBlocked;
             var currentStatus = isBlocked ? "blocked" : "active";
-            var currentTariff = activeSub != null ? activeSub.Plan.ToString().ToLower() : "free";
+            var currentTariff = activeSub != null ? activeSub.Plan.ToString().ToLower() : "Free";
 
             return new MasterAdminDto
             {
@@ -72,7 +72,7 @@ public class MasterController : ControllerBase
                 Rating = m.Bookings
                             .Where(b => b.Review != null)
                             .Select(b => (double?)b.Review!.Rating)
-                            .Average() ?? 0,
+                            .Average() ?? null,
                 ClientsCount = m.Bookings.Where(b=> b.Status == BookingStatus.Completed).Select(b => b.UserId).Distinct().Count()
             };
         }).ToList();
@@ -217,13 +217,13 @@ public class MasterController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> CreateTestMasterWith10mSub()
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "test1m@slotik.com");
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "test10m@slotik.com");
         if (user == null)
         {
             user = new User
             {
                 FirstName = "Test",
-                LastName = "1m",
+                LastName = "10m",
                 Email = "test10m@slotik.com",
                 PasswordHash = "hashed_password",
                 Role = UserRole.Master

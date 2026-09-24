@@ -14,6 +14,18 @@ namespace Slotik.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.InsertData(
+                table: "Categories",
+                columns: new[] { "Id", "Icon", "IsHiddenFromCatalog", "Name" },
+                values: new object[,]
+                {
+                    { 1, "hand-finger", false, "Манікюр" },
+                    { 2, "scissors", false, "Перукар" },
+                    { 3, "sparkles", false, "Візаж" },
+                    { 4, "eye", false, "Брови та вії" },
+                    { 5, "needle", false, "Тату" }
+                });
+
+            migrationBuilder.InsertData(
                 table: "Users",
                 columns: new[] { "Id", "CreatedAt", "Email", "FirstName", "LastName", "PasswordHash", "Phone", "Role", "TelegramChatId" },
                 values: new object[,]
@@ -73,6 +85,31 @@ namespace Slotik.Migrations
                 table: "Users",
                 keyColumn: "Id",
                 keyValue: 900002);
+
+            migrationBuilder.DeleteData(
+                table: "Categories",
+                keyColumn: "Id",
+                keyValue: 1);
+
+            migrationBuilder.DeleteData(
+                table: "Categories",
+                keyColumn: "Id",
+                keyValue: 2);
+
+            migrationBuilder.DeleteData(
+                table: "Categories",
+                keyColumn: "Id",
+                keyValue: 3);
+
+            migrationBuilder.DeleteData(
+                table: "Categories",
+                keyColumn: "Id",
+                keyValue: 4);
+
+            migrationBuilder.DeleteData(
+                table: "Categories",
+                keyColumn: "Id",
+                keyValue: 5);
         }
     }
 }

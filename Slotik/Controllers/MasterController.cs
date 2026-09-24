@@ -51,11 +51,19 @@ public class MasterController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim().ToLower();
+            var escapedTerm = search.Trim()
+                .Replace(@"\", @"\\")
+                .Replace("%", @"\%")
+                .Replace("_", @"\_");
+
+            var pattern = $"%{escapedTerm}%";
+
             query = query.Where(m =>
-                EF.Functions.Like(m.User.FirstName.ToLower(), $"%{term}%") ||
-                EF.Functions.Like(m.User.LastName.ToLower(), $"%{term}%") ||
-                m.Services.Any(s => EF.Functions.Like(s.Name.ToLower(), $"%{term}%"))
+                EF.Functions.ILike(m.User.FirstName, pattern, @"\") ||
+                EF.Functions.ILike(m.User.LastName, pattern, @"\") ||
+                EF.Functions.ILike(m.User.FirstName + " " + m.User.LastName, pattern, @"\") ||
+                EF.Functions.ILike(m.User.LastName + " " + m.User.FirstName, pattern, @"\") ||
+                m.Services.Any(s => EF.Functions.ILike(s.Name, pattern, @"\"))
             );
         }
 

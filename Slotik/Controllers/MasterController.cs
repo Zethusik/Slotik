@@ -19,9 +19,13 @@ public class MasterController : ControllerBase
         _context = context;
     }
 
-    // GET /api/Master?status=active&categoryId=3
     [HttpGet]
-    public async Task<IActionResult> GetMasters([FromQuery] string? status, [FromQuery] int? categoryId)
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMasters(
+        [FromQuery] string? status,
+        [FromQuery] int? categoryId,
+        [FromQuery] int? cityId,
+        [FromQuery] string? search)
     {
         var now = DateTimeOffset.UtcNow;
         var query = _context.Masters
@@ -30,13 +34,29 @@ public class MasterController : ControllerBase
             .Include(m => m.District)
                 .ThenInclude(d => d.City)
             .Include(m => m.Subscriptions)
+            .Include(m => m.Services)
             .Include(m => m.Bookings)
-            .ThenInclude(m=> m.Review)
+                .ThenInclude(b => b.Review)
             .AsQueryable();
 
         if (categoryId.HasValue)
         {
             query = query.Where(m => m.CategoryId == categoryId.Value);
+        }
+
+        if (cityId.HasValue)
+        {
+            query = query.Where(m => m.District != null && m.District.CityId == cityId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(m =>
+                EF.Functions.Like(m.User.FirstName.ToLower(), $"%{term}%") ||
+                EF.Functions.Like(m.User.LastName.ToLower(), $"%{term}%") ||
+                m.Services.Any(s => EF.Functions.Like(s.Name.ToLower(), $"%{term}%"))
+            );
         }
 
         var mastersList = await query.ToListAsync();
@@ -50,14 +70,14 @@ public class MasterController : ControllerBase
 
             var isBlocked = m.IsBlocked;
             var currentStatus = isBlocked ? "blocked" : "active";
-            var currentTariff = activeSub != null ? activeSub.Plan.ToString().ToLower() : "Free";
+            var currentTariff = activeSub != null ? activeSub.Plan.ToString().ToLower() : "free";
 
             return new MasterAdminDto
             {
                 Id = m.Id,
                 FirstName = m.User.FirstName,
                 LastName = m.User.LastName,
-                Category = m.Category.Name,
+                Category = m.Category?.Name ?? string.Empty,
                 City = m.District?.City?.Name ?? "Kyiv",
                 Status = currentStatus,
                 SubscriptionUntil = activeSub != null ? activeSub.ExpiresAt : null,
@@ -66,14 +86,16 @@ public class MasterController : ControllerBase
                 DistrictName = m.District?.Name ?? string.Empty,
                 CreatedAt = m.User.CreatedAt,
                 AvatarUrl = string.Empty,
-                
-
                 Slug = m.Slug,
                 Rating = m.Bookings
                             .Where(b => b.Review != null)
                             .Select(b => (double?)b.Review!.Rating)
                             .Average() ?? null,
-                ClientsCount = m.Bookings.Where(b=> b.Status == BookingStatus.Completed).Select(b => b.UserId).Distinct().Count()
+                ClientsCount = m.Bookings
+                            .Where(b => b.Status == BookingStatus.Completed)
+                            .Select(b => b.UserId)
+                            .Distinct()
+                            .Count()
             };
         }).ToList();
 
@@ -85,7 +107,6 @@ public class MasterController : ControllerBase
         return Ok(list);
     }
 
-    // GET /api/Master/{id}
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
@@ -99,7 +120,6 @@ public class MasterController : ControllerBase
         return Ok(master);
     }
 
-    // GET /api/Master/slug/{slug}
     [HttpGet("slug/{slug}")]
     public async Task<IActionResult> GetBySlug(string slug)
     {
@@ -113,7 +133,6 @@ public class MasterController : ControllerBase
         return Ok(master);
     }
 
-    // POST /api/Master
     [HttpPost]
     [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateMasterDto dto)
@@ -121,7 +140,7 @@ public class MasterController : ControllerBase
         var exists = await _context.Masters.AnyAsync(m => m.UserId == dto.UserId);
         if (exists)
         {
-            return BadRequest(new { message = "Мастер для этого пользователя уже создан" });
+            return BadRequest(new { message = "Master for this user already exists" });
         }
 
         var master = new Master
@@ -142,7 +161,6 @@ public class MasterController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = master.Id }, master);
     }
 
-    // PUT /api/Master/{id}
     [HttpPut("{id:int}")]
     [Authorize]
     public async Task<IActionResult> Update(int id, [FromBody] CreateMasterDto dto)
@@ -163,7 +181,6 @@ public class MasterController : ControllerBase
         return NoContent();
     }
 
-    // DELETE /api/Master/{id}
     [HttpDelete("{id:int}")]
     [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Delete(int id)
@@ -176,7 +193,6 @@ public class MasterController : ControllerBase
         return Ok(new { message = "Master deleted successfully" });
     }
 
-    // PATCH /api/Master/{id}/block
     [HttpPatch("{id:int}/block")]
     [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> ToggleBlockMaster(int id)
@@ -190,7 +206,6 @@ public class MasterController : ControllerBase
         return Ok(new { message = "Master block status updated successfully", isBlocked = master.IsBlocked });
     }
 
-    // PATCH /api/Master/{id}/subscription
     [HttpPatch("{id:int}/subscription")]
     [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> UpdateMasterSubscription(int id, [FromBody] UpdateSubscriptionDto dto)
@@ -212,7 +227,6 @@ public class MasterController : ControllerBase
         return Ok(newSub);
     }
 
-    // Test button 10m for test
     [HttpPost("test-seed/expire-in-10m")]
     [AllowAnonymous]
     public async Task<IActionResult> CreateTestMasterWith10mSub()
@@ -223,16 +237,16 @@ public class MasterController : ControllerBase
             user = new User
             {
                 FirstName = "Test",
-                LastName = "10m",
+                LastName = "10Min",
                 Email = "test10m@slotik.com",
-                PasswordHash = "hashed_password",
+                PasswordHash = "d357150517d3e65ae84985f7b705ad99fdc38372a22ecea0cecaf8aaf820a249",
                 Role = UserRole.Master
             };
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
         }
 
-        var category = await _context.Categories.FirstOrDefaultAsync() ?? new Category { Name = "Test" };
+        var category = await _context.Categories.FirstOrDefaultAsync() ?? new Category { Name = "Manicure" };
         var district = await _context.Districts.FirstOrDefaultAsync();
 
         var master = await _context.Masters.Include(m => m.Subscriptions).FirstOrDefaultAsync(m => m.UserId == user.Id);
@@ -244,8 +258,8 @@ public class MasterController : ControllerBase
                 CategoryId = category.Id,
                 DistrictId = district?.Id ?? 1,
                 Slug = "test-master-10m",
-                ExperienceYears = 1,
-                SlotStepMin = 1
+                ExperienceYears = 5,
+                SlotStepMin = 30
             };
             _context.Masters.Add(master);
             await _context.SaveChangesAsync();
@@ -256,7 +270,7 @@ public class MasterController : ControllerBase
             MasterId = master.Id,
             Plan = SubscriptionPlan.Pro,
             Status = SubscriptionStatus.Active,
-            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10)
         };
 
         _context.Subscriptions.Add(sub);
@@ -264,7 +278,7 @@ public class MasterController : ControllerBase
 
         return Ok(new
         {
-            message = "ok",
+            message = "Test master created successfully. Subscription expires in 10 minutes.",
             masterId = master.Id,
             slug = master.Slug,
             tariff = "pro",

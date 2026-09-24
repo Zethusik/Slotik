@@ -58,7 +58,6 @@ namespace Slotik.Data
                 await context.SaveChangesAsync();
             }
 
-            // Проверяем / создаем категории
             var cat1 = await context.Categories.FirstOrDefaultAsync(c => c.Name == "Манікюр");
             if (cat1 == null)
             {

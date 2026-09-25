@@ -25,6 +25,7 @@ public class MasterController : ControllerBase
         [FromQuery] string? status,
         [FromQuery] int? categoryId,
         [FromQuery] int? cityId,
+        [FromQuery] int? districtId,
         [FromQuery] string? search)
     {
         var now = DateTimeOffset.UtcNow;
@@ -47,6 +48,11 @@ public class MasterController : ControllerBase
         if (cityId.HasValue)
         {
             query = query.Where(m => m.District != null && m.District.CityId == cityId.Value);
+        }
+
+        if (districtId.HasValue)
+        {
+            query = query.Where(m => m.DistrictId == districtId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(search))

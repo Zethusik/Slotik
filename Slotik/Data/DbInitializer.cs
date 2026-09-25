@@ -42,11 +42,20 @@ namespace Slotik.Data
                 await context.SaveChangesAsync();
             }
 
-            var districtKyiv = await context.Districts.FirstOrDefaultAsync(d => d.CityId == cityKyiv.Id);
-            if (districtKyiv == null)
+            var districtKyivPechersk = await context.Districts.FirstOrDefaultAsync(d => d.CityId == cityKyiv.Id && d.Name == "Печерський")
+                ?? await context.Districts.FirstOrDefaultAsync(d => d.CityId == cityKyiv.Id);
+            if (districtKyivPechersk == null)
             {
-                districtKyiv = new District { Name = "Печерський", CityId = cityKyiv.Id };
-                context.Districts.Add(districtKyiv);
+                districtKyivPechersk = new District { Name = "Печерський", CityId = cityKyiv.Id };
+                context.Districts.Add(districtKyivPechersk);
+                await context.SaveChangesAsync();
+            }
+
+            var districtKyivShevchenko = await context.Districts.FirstOrDefaultAsync(d => d.CityId == cityKyiv.Id && d.Name == "Шевченківський");
+            if (districtKyivShevchenko == null)
+            {
+                districtKyivShevchenko = new District { Name = "Шевченківський", CityId = cityKyiv.Id };
+                context.Districts.Add(districtKyivShevchenko);
                 await context.SaveChangesAsync();
             }
 
@@ -114,11 +123,13 @@ namespace Slotik.Data
                     context.Users.Add(user);
                     await context.SaveChangesAsync();
 
+                    var assignedDistrict = (i <= 3) ? districtKyivPechersk : districtKyivShevchenko;
+
                     var master = new Master
                     {
                         UserId = user.Id,
                         CategoryId = categories[i % categories.Length].Id,
-                        DistrictId = districtKyiv.Id,
+                        DistrictId = assignedDistrict.Id,
                         Slug = $"master-kyiv-{i}",
                         ExperienceYears = 2 + (i % 5),
                         SlotStepMin = 30
@@ -213,7 +224,7 @@ namespace Slotik.Data
                 {
                     UserId = user27.Id,
                     CategoryId = cat1.Id,
-                    DistrictId = districtKyiv.Id,
+                    DistrictId = districtKyivPechersk.Id,
                     Slug = "master-27hours",
                     ExperienceYears = 3,
                     SlotStepMin = 30

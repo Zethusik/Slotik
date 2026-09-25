@@ -55,7 +55,7 @@ public class Program
             options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
             {
                 Title = "Slotik API",
-                Version = "v1337 08.09.2026"
+                Version = "v1337 25.09.2026"
             });
 
             options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme

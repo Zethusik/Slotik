@@ -69,6 +69,7 @@ public class MasterController : ControllerBase
                 EF.Functions.ILike(m.User.LastName, pattern, @"\") ||
                 EF.Functions.ILike(m.User.FirstName + " " + m.User.LastName, pattern, @"\") ||
                 EF.Functions.ILike(m.User.LastName + " " + m.User.FirstName, pattern, @"\") ||
+                (m.Category != null && EF.Functions.ILike(m.Category.Name, pattern, @"\")) ||
                 m.Services.Any(s => EF.Functions.ILike(s.Name, pattern, @"\"))
             );
         }

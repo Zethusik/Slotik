@@ -12,7 +12,6 @@ namespace Slotik.Controllers
     [ApiController]
     public class ServiceController : ControllerBase
     {
-
         private readonly AppDbContext _context;
 
         public ServiceController(AppDbContext context)
@@ -21,18 +20,41 @@ namespace Slotik.Controllers
         }
 
         [HttpGet]
-        
-        public async Task<ActionResult> GetAll()
+        [AllowAnonymous]
+        public async Task<ActionResult> GetAll([FromQuery] int? masterId)
         {
-            var service = await _context.Services.Include(s => s.Master).Include(s=>s.Photos).Include(s=>s.Bookings).ToListAsync();
-            return Ok(service);
+            var query = _context.Services.AsQueryable();
+
+            if (masterId.HasValue)
+            {
+                query = query.Where(s => s.MasterId == masterId.Value);
+            }
+
+            var services = await query
+                .Select(s => new
+                {
+                    id = s.Id,
+                    masterId = s.MasterId,
+                    name = s.Name,
+                    price = s.Price,
+                    durationMin = s.DurationMin,
+                    description = s.Description,
+                    included = s.Included
+                })
+                .ToListAsync();
+
+            return Ok(services);
         }
 
         [HttpGet("{Id}")]
-        
+        [AllowAnonymous]
         public async Task<ActionResult> GetById(int id)
         {
-            var service = await _context.Services.Include(s => s.Master).Include(s => s.Photos).Include(s => s.Bookings).FirstOrDefaultAsync(s => s.Id == id);
+            var service = await _context.Services
+                .Include(s => s.Master)
+                .Include(s => s.Photos)
+                .FirstOrDefaultAsync(s => s.Id == id);
+
             if (service == null) { return NotFound("Service Not Found."); }
 
             return Ok(service);
@@ -40,15 +62,14 @@ namespace Slotik.Controllers
 
         [HttpDelete("{Id}")]
         [Authorize(Roles = "Superadmin")]
-
         public async Task<ActionResult> DeleteById(int Id)
         {
-            var service = await _context.Services.Include(s => s.Master).Include(s => s.Photos).Include(s => s.Bookings).FirstOrDefaultAsync(s => s.Id == Id);
+            var service = await _context.Services.FirstOrDefaultAsync(s => s.Id == Id);
 
             if (service == null) { return NotFound("Service Not Found."); }
 
             _context.Services.Remove(service);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return Ok("Service is deleted");
         }
@@ -63,7 +84,6 @@ namespace Slotik.Controllers
                 DurationMin = dto.DurationMin,
                 Price = dto.Price,
                 Name = dto.Name,
-
             };
 
             _context.Services.Add(sub);
@@ -73,7 +93,6 @@ namespace Slotik.Controllers
 
         [HttpPut("{id}")]
         [Authorize(Roles = "Superadmin")]
-
         public async Task<ActionResult> Update(int id, [FromBody] CreateServiceDTO dto)
         {
             var serviceToChange = await _context.Services.FirstOrDefaultAsync(s => s.Id == id);

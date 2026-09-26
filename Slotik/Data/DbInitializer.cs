@@ -137,13 +137,48 @@ namespace Slotik.Data
                     context.Masters.Add(master);
                     await context.SaveChangesAsync();
 
-                    context.Services.Add(new Service
+                    if (i == 1)
                     {
-                        MasterId = master.Id,
-                        Name = i % 2 == 0 ? "Класичний манікюр" : "Стрижка та укладка",
-                        Price = 500m,
-                        DurationMin = 60
-                    });
+                        context.Services.AddRange(
+                            new Service
+                            {
+                                MasterId = master.Id,
+                                Name = "Манікюр + гель-лак",
+                                Price = 600m,
+                                DurationMin = 90,
+                                Description = "Зняття, комбінований манікюр, покриття гель-лаком",
+                                Included = "Манікюр, вирівнювання, дизайн 2 пальців"
+                            },
+                            new Service
+                            {
+                                MasterId = master.Id,
+                                Name = "Манікюр + гель",
+                                Price = 800m,
+                                DurationMin = 120,
+                                Description = "Укріплення та моделювання твердим гелем",
+                                Included = "Манікюр, укріплення, однотонне покриття"
+                            },
+                            new Service
+                            {
+                                MasterId = master.Id,
+                                Name = "Педикюр",
+                                Price = 750m,
+                                DurationMin = 90,
+                                Description = "Апаратний педикюр з обробкою стопи та пальчиків",
+                                Included = "Стопа, пальчики, крем"
+                            }
+                        );
+                    }
+                    else
+                    {
+                        context.Services.Add(new Service
+                        {
+                            MasterId = master.Id,
+                            Name = i % 2 == 0 ? "Класичний манікюр" : "Стрижка та укладка",
+                            Price = 500m,
+                            DurationMin = 60
+                        });
+                    }
 
                     context.Subscriptions.Add(new Subscription
                     {

@@ -241,26 +241,30 @@ public class MasterController : ControllerBase
 
         if (activeSub == null && plan != null)
         {
-            var sub = m.Subscriptions.Where(s => s.Plan == SubscriptionPlan.Free).OrderByDescending(s=>s.ExpiresAt).First();
+            
 
             
 
             nSub.Plan = plan.Value;
 
-            if (days != null)
+            if (plan != SubscriptionPlan.Free)
             {
-                if (days.Value <= 0) { return BadRequest("Wrong days value"); }
-                nSub.ExpiresAt = DateTimeOffset.Now.AddDays(days.Value);
+                if (days != null)
+                {
+                    if (days.Value <= 0) { return BadRequest("Wrong days value"); }
+                    nSub.ExpiresAt = DateTimeOffset.Now.AddDays(days.Value);
+                }
+                else
+                {
+                    nSub.ExpiresAt = DateTimeOffset.Now.AddDays(30);
+                }
             }
-            else
-            {
-                nSub.ExpiresAt = DateTimeOffset.Now.AddDays(30);
-            }
-
-            sub.Status = SubscriptionStatus.Cancelled;
+            
 
             
-            nSub.MasterId = sub.MasterId;
+
+            
+            nSub.MasterId = m.Id;
             nSub.Status = SubscriptionStatus.Active;
             
 
@@ -274,18 +278,22 @@ public class MasterController : ControllerBase
         {
             nSub.Plan = plan.Value;
 
-            if (days != null)
+            if (days != null && plan != SubscriptionPlan.Free)
             {
                 nSub.ExpiresAt = activeSub.ExpiresAt.AddDays(days.Value);
             }
             else 
             {
-                nSub.ExpiresAt = activeSub.ExpiresAt;
+                if (plan != SubscriptionPlan.Free)
+                {
+                    nSub.ExpiresAt = activeSub.ExpiresAt;
+                }
+               
             }
 
-            nSub.Master = activeSub.Master;
+            
             nSub.MasterId = activeSub.MasterId;
-            nSub.Payments = activeSub.Payments;
+           
             nSub.Status = SubscriptionStatus.Active;
 
             activeSub.Status = SubscriptionStatus.Cancelled;
@@ -299,7 +307,10 @@ public class MasterController : ControllerBase
 
         if (days != null && plan == null)
         {
+            if (days.Value <= 0) { return BadRequest("Wrong days value"); }
             activeSub.ExpiresAt = activeSub.ExpiresAt.AddDays(days.Value);
+            await _context.SaveChangesAsync();
+            return Ok(new { text = "Ok", Plan = activeSub.Plan, ExpiresAt = activeSub.ExpiresAt });
         }
 
 

@@ -252,11 +252,11 @@ public class MasterController : ControllerBase
                 if (days != null)
                 {
                     if (days.Value <= 0) { return BadRequest("Wrong days value"); }
-                    nSub.ExpiresAt = DateTimeOffset.Now.AddDays(days.Value);
+                    nSub.ExpiresAt = DateTimeOffset.UtcNow.AddDays(days.Value);
                 }
                 else
                 {
-                    nSub.ExpiresAt = DateTimeOffset.Now.AddDays(30);
+                    nSub.ExpiresAt = DateTimeOffset.UtcNow.AddDays(30);
                 }
             }
             

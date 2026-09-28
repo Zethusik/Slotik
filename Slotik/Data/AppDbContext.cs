@@ -247,14 +247,46 @@ public class AppDbContext : DbContext
 
                 MasterId = 900001,
 
-                Name = "Тестова послуга",
+                Name = "Манікюр + гель-лак",
                 DurationMin = 60,
-                Price = 800m,
+                Price = 300m,
 
-                Description = "Тестова послуга для перевірки записів майстра.",
+                Description = "Манікюр + гель-лак",
                 Included = "Консультація та виконання послуги"
             }
         );
+
+        modelBuilder.Entity<Service>().HasData(
+            new Service
+            {
+                Id = 920002,
+
+                MasterId = 900001,
+
+                Name = "Манікюр + гель",
+                DurationMin = 60,
+                Price = 250m,
+
+                Description = "Манікюр + гель",
+                Included = "Консультація та виконання послуги"   
+            }
+        );
+
+        modelBuilder.Entity<Service>().HasData(
+           new Service
+           {
+               Id = 920003,
+
+               MasterId = 900001,
+
+               Name = "Педикюр",
+               DurationMin = 30,
+               Price = 801m,
+
+               Description = "Педикюр",
+               Included = "Консультація та виконання послуги"   
+           }
+       );
 
 
         // =========================

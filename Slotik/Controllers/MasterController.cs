@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
@@ -223,23 +224,87 @@ public class MasterController : ControllerBase
 
     [HttpPatch("{id:int}/subscription")]
     [Authorize(Roles = "Superadmin")]
-    public async Task<IActionResult> UpdateMasterSubscription(int id, [FromBody] UpdateSubscriptionDto dto)
+    public async Task<IActionResult> UpdateMasterSubscription(int id, [FromQuery] SubscriptionPlan? plan, [FromQuery] int? days)
     {
-        var master = await _context.Masters.FindAsync(id);
-        if (master == null) return NotFound(new { message = "Master not found" });
+        if (plan == null && days == null) { return BadRequest("Empty values - days, plan"); }
+        var m = await _context.Masters.Include(m=>m.Subscriptions).FirstOrDefaultAsync(m=>m.Id==id);
+        if (m == null) return NotFound(new { message = "Master not found" });
 
-        var newSub = new Models.Subscription
+        var activeSub = m.Subscriptions
+                .Where(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > DateTimeOffset.UtcNow && s.Plan != SubscriptionPlan.Free)
+                .OrderByDescending(s => s.ExpiresAt)
+                .FirstOrDefault();
+
+        Subscription nSub = new Subscription { };
+
+        if (activeSub == null && plan == null) { return BadRequest("Master has an active Free plan."); }
+
+        if (activeSub == null && plan != null)
         {
-            MasterId = master.Id,
-            Plan = dto.Plan,
-            Status = SubscriptionStatus.Active,
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(dto.Days)
-        };
+            var sub = m.Subscriptions.Where(s => s.Plan == SubscriptionPlan.Free).OrderByDescending(s=>s.ExpiresAt).First();
 
-        _context.Subscriptions.Add(newSub);
+            
+
+            nSub.Plan = plan.Value;
+
+            if (days != null)
+            {
+                if (days.Value <= 0) { return BadRequest("Wrong days value"); }
+                nSub.ExpiresAt = DateTimeOffset.Now.AddDays(days.Value);
+            }
+            else
+            {
+                nSub.ExpiresAt = DateTimeOffset.Now.AddDays(30);
+            }
+
+            sub.Status = SubscriptionStatus.Cancelled;
+
+            
+            nSub.MasterId = sub.MasterId;
+            nSub.Status = SubscriptionStatus.Active;
+            
+
+            await _context.Subscriptions.AddAsync(nSub);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { text = "Ok", Plan = nSub.Plan, ExpiresAt = nSub.ExpiresAt });
+        }
+
+        if (plan != null)
+        {
+            nSub.Plan = plan.Value;
+
+            if (days != null)
+            {
+                nSub.ExpiresAt = activeSub.ExpiresAt.AddDays(days.Value);
+            }
+            else 
+            {
+                nSub.ExpiresAt = activeSub.ExpiresAt;
+            }
+
+            nSub.Master = activeSub.Master;
+            nSub.MasterId = activeSub.MasterId;
+            nSub.Payments = activeSub.Payments;
+            nSub.Status = SubscriptionStatus.Active;
+
+            activeSub.Status = SubscriptionStatus.Cancelled;
+
+            await _context.Subscriptions.AddAsync(nSub);
+
+
+
+
+        }
+
+        if (days != null && plan == null)
+        {
+            activeSub.ExpiresAt = activeSub.ExpiresAt.AddDays(days.Value);
+        }
+
+
         await _context.SaveChangesAsync();
-
-        return Ok(newSub);
+        return Ok(new { text = "Ok", Plan = nSub.Plan, ExpiresAt = nSub.ExpiresAt });
     }
 
     [HttpPost("test-seed/expire-in-10m")]

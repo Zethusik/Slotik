@@ -137,6 +137,43 @@ namespace Slotik.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Categories");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Icon = "hand-finger",
+                            IsHiddenFromCatalog = false,
+                            Name = "Манікюр"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Icon = "scissors",
+                            IsHiddenFromCatalog = false,
+                            Name = "Перукар"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Icon = "sparkles",
+                            IsHiddenFromCatalog = false,
+                            Name = "Візаж"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Icon = "eye",
+                            IsHiddenFromCatalog = false,
+                            Name = "Брови та вії"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Icon = "needle",
+                            IsHiddenFromCatalog = false,
+                            Name = "Тату"
+                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.City", b =>
@@ -881,6 +918,9 @@ namespace Slotik.Migrations
                     b.Property<string>("About")
                         .HasColumnType("text");
 
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
                     b.Property<int>("CategoryId")
                         .HasColumnType("integer");
 
@@ -892,6 +932,12 @@ namespace Slotik.Migrations
 
                     b.Property<bool>("IsBlocked")
                         .HasColumnType("boolean");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("SlotStepMin")
                         .HasColumnType("integer");

@@ -10,4 +10,8 @@ public class CreateMasterDto
     public int ExperienceYears { get; set; }
     public int SlotStepMin { get; set; }
     public bool IsBlocked { get; set; } = false;
+
+    public string? Address { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
 }

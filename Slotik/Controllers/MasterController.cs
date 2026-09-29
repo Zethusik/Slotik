@@ -137,22 +137,92 @@ public class MasterController : ControllerBase
     }
 
     [HttpGet("slug/{slug}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetBySlug(string slug)
     {
         var master = await _context.Masters
             .Include(m => m.User)
             .Include(m => m.Category)
             .Include(m => m.District)
+                .ThenInclude(d => d.City)
+            .Include(m => m.Services)
             .FirstOrDefaultAsync(m => m.Slug == slug);
 
         if (master == null) return NotFound(new { message = "Master not found" });
-        return Ok(master);
+
+        return Ok(new
+        {
+            master.Id,
+            master.UserId,
+            master.Slug,
+            master.About,
+            master.ExperienceYears,
+            master.SlotStepMin,
+            master.IsBlocked,
+            master.CategoryId,
+            CategoryName = master.Category?.Name,
+            master.DistrictId,
+            DistrictName = master.District?.Name,
+            CityName = master.District?.City?.Name,
+            master.Address,
+            master.Latitude,
+            master.Longitude,
+            User = new
+            {
+                master.User.Id,
+                master.User.FirstName,
+                master.User.LastName,
+                master.User.Email,
+                master.User.Phone
+            },
+            master.Services
+        });
+    }
+
+    [HttpPatch("{id:int}/location")]
+    [Authorize]
+    public async Task<IActionResult> UpdateLocation(int id, [FromBody] UpdateMasterLocationDto dto)
+    {
+        var master = await _context.Masters
+            .Include(m => m.District)
+                .ThenInclude(d => d.City)
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (master == null) return NotFound(new { message = "Master not found" });
+
+        if (dto.DistrictId.HasValue)
+        {
+            master.DistrictId = dto.DistrictId.Value;
+        }
+
+        master.Address = string.IsNullOrWhiteSpace(dto.Address) ? null : dto.Address.Trim();
+        master.Latitude = dto.Latitude;
+        master.Longitude = dto.Longitude;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Location updated successfully",
+            districtId = master.DistrictId,
+            districtName = master.District?.Name,
+            cityName = master.District?.City?.Name,
+            address = master.Address,
+            latitude = master.Latitude,
+            longitude = master.Longitude
+        });
     }
 
     [HttpPost]
     [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateMasterDto dto)
     {
+        var user = await _context.Users.FindAsync(dto.UserId);
+        if (user == null)
+        {
+            return NotFound(new { message = $"User with Id {dto.UserId} not found" });
+        }
+
         var exists = await _context.Masters.AnyAsync(m => m.UserId == dto.UserId);
         if (exists)
         {
@@ -168,7 +238,10 @@ public class MasterController : ControllerBase
             About = dto.About,
             ExperienceYears = dto.ExperienceYears,
             SlotStepMin = dto.SlotStepMin,
-            IsBlocked = dto.IsBlocked
+            IsBlocked = dto.IsBlocked,
+            Address = dto.Address,
+            Latitude = dto.Latitude,
+            Longitude = dto.Longitude
         };
 
         _context.Masters.Add(master);
@@ -192,6 +265,9 @@ public class MasterController : ControllerBase
         master.CategoryId = dto.CategoryId;
         master.DistrictId = dto.DistrictId;
         master.UserId = dto.UserId;
+        master.Address = dto.Address;
+        master.Latitude = dto.Latitude;
+        master.Longitude = dto.Longitude;
 
         await _context.SaveChangesAsync();
         return NoContent();

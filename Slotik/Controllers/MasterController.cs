@@ -135,7 +135,6 @@ public class MasterController : ControllerBase
         if (master == null) return NotFound(new { message = "Master not found" });
         return Ok(master);
     }
-
     [HttpGet("slug/{slug}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetBySlug(string slug)
@@ -173,7 +172,8 @@ public class MasterController : ControllerBase
                 master.User.FirstName,
                 master.User.LastName,
                 master.User.Email,
-                master.User.Phone
+                master.User.Phone,
+                master.User.CreatedAt
             },
             master.Services
         });

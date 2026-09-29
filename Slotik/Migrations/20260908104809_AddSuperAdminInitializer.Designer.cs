@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Slotik.Data;
@@ -11,9 +12,11 @@ using Slotik.Data;
 namespace Slotik.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908104809_AddSuperAdminInitializer")]
+    partial class AddSuperAdminInitializer
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -63,56 +66,6 @@ namespace Slotik.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Bookings");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 930001,
-                            Comment = "Перший завершений запис клієнта.",
-                            EndsAt = new DateTimeOffset(new DateTime(2026, 8, 10, 11, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            MasterId = 900001,
-                            ReminderSent = true,
-                            ServiceId = 920001,
-                            StartsAt = new DateTimeOffset(new DateTime(2026, 8, 10, 10, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Status = 2,
-                            UserId = 910001
-                        },
-                        new
-                        {
-                            Id = 930002,
-                            Comment = "Другий завершений запис того самого клієнта.",
-                            EndsAt = new DateTimeOffset(new DateTime(2026, 9, 5, 15, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            MasterId = 900001,
-                            ReminderSent = true,
-                            ServiceId = 920001,
-                            StartsAt = new DateTimeOffset(new DateTime(2026, 9, 5, 14, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Status = 2,
-                            UserId = 910001
-                        },
-                        new
-                        {
-                            Id = 930003,
-                            Comment = "Клієнт скасував запис.",
-                            EndsAt = new DateTimeOffset(new DateTime(2026, 9, 12, 13, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            MasterId = 900001,
-                            ReminderSent = false,
-                            ServiceId = 920001,
-                            StartsAt = new DateTimeOffset(new DateTime(2026, 9, 12, 12, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Status = 3,
-                            UserId = 910002
-                        },
-                        new
-                        {
-                            Id = 930004,
-                            Comment = "Майбутній підтверджений запис.",
-                            EndsAt = new DateTimeOffset(new DateTime(2027, 1, 15, 12, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            MasterId = 900001,
-                            ReminderSent = false,
-                            ServiceId = 920001,
-                            StartsAt = new DateTimeOffset(new DateTime(2027, 1, 15, 11, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Status = 1,
-                            UserId = 910003
-                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.Category", b =>
@@ -126,9 +79,6 @@ namespace Slotik.Migrations
                     b.Property<string>("Icon")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<bool>("IsHiddenFromCatalog")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -913,32 +863,6 @@ namespace Slotik.Migrations
                         .IsUnique();
 
                     b.ToTable("Masters");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 900001,
-                            About = "Тестовий майстер з Free тарифом",
-                            CategoryId = 1,
-                            DistrictId = 1,
-                            ExperienceYears = 3,
-                            IsBlocked = false,
-                            SlotStepMin = 30,
-                            Slug = "master-free-1",
-                            UserId = 900001
-                        },
-                        new
-                        {
-                            Id = 900002,
-                            About = "Тестовий майстер з Free тарифом",
-                            CategoryId = 1,
-                            DistrictId = 1,
-                            ExperienceYears = 5,
-                            IsBlocked = false,
-                            SlotStepMin = 30,
-                            Slug = "master-free-2",
-                            UserId = 900002
-                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.Notification", b =>
@@ -1046,36 +970,6 @@ namespace Slotik.Migrations
                     b.ToTable("PendingRegistrations");
                 });
 
-            modelBuilder.Entity("Slotik.Models.PendingReset", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("codeExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("codeHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("email")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("finalExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("finalTokenHash")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("PendingResets");
-                });
-
             modelBuilder.Entity("Slotik.Models.Review", b =>
                 {
                     b.Property<int>("Id")
@@ -1100,22 +994,6 @@ namespace Slotik.Migrations
                         .IsUnique();
 
                     b.ToTable("Reviews");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 940001,
-                            BookingId = 930001,
-                            Rating = 5,
-                            Text = "Все дуже сподобалось."
-                        },
-                        new
-                        {
-                            Id = 940002,
-                            BookingId = 930002,
-                            Rating = 4,
-                            Text = "Хороший майстер, прийду ще."
-                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.Schedule", b =>
@@ -1186,38 +1064,6 @@ namespace Slotik.Migrations
                     b.HasIndex("MasterId");
 
                     b.ToTable("Services");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 920001,
-                            Description = "Манікюр + гель-лак",
-                            DurationMin = 60,
-                            Included = "Консультація та виконання послуги",
-                            MasterId = 900001,
-                            Name = "Манікюр + гель-лак",
-                            Price = 300m
-                        },
-                        new
-                        {
-                            Id = 920002,
-                            Description = "Манікюр + гель",
-                            DurationMin = 60,
-                            Included = "Консультація та виконання послуги",
-                            MasterId = 900001,
-                            Name = "Манікюр + гель",
-                            Price = 250m
-                        },
-                        new
-                        {
-                            Id = 920003,
-                            Description = "Педикюр",
-                            DurationMin = 30,
-                            Included = "Консультація та виконання послуги",
-                            MasterId = 900001,
-                            Name = "Педикюр",
-                            Price = 801m
-                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.ServicePhoto", b =>
@@ -1270,24 +1116,6 @@ namespace Slotik.Migrations
                     b.HasIndex("MasterId");
 
                     b.ToTable("Subscriptions");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 900001,
-                            ExpiresAt = new DateTimeOffset(new DateTime(2099, 12, 31, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            MasterId = 900001,
-                            Plan = 0,
-                            Status = 0
-                        },
-                        new
-                        {
-                            Id = 900002,
-                            ExpiresAt = new DateTimeOffset(new DateTime(2026, 9, 24, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            MasterId = 900002,
-                            Plan = 2,
-                            Status = 0
-                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.User", b =>
@@ -1297,9 +1125,6 @@ namespace Slotik.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -1333,63 +1158,6 @@ namespace Slotik.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 900001,
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 15, 12, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Email = "masterfree1@slotik.com",
-                            FirstName = "Майстер",
-                            LastName = "Free1",
-                            PasswordHash = "2b5efdd05f1be04909fd37f788acae6a1b039f3be38dc39ea84c1f569be1fded",
-                            Phone = "+380000000001",
-                            Role = 1
-                        },
-                        new
-                        {
-                            Id = 900002,
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 15, 12, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Email = "masterfree2@slotik.com",
-                            FirstName = "Майстер",
-                            LastName = "Free2",
-                            PasswordHash = "2b5efdd05f1be04909fd37f788acae6a1b039f3be38dc39ea84c1f569be1fded",
-                            Phone = "+380000000002",
-                            Role = 1
-                        },
-                        new
-                        {
-                            Id = 910001,
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 10, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Email = "client1@slotik.test",
-                            FirstName = "Олександр",
-                            LastName = "Клієнт",
-                            PasswordHash = "598e94d875ce2d6f38c297129b5c059afe1b4f6590682b19e27c3deecf6c4140",
-                            Phone = "+380501110001",
-                            Role = 0
-                        },
-                        new
-                        {
-                            Id = 910002,
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 5, 10, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Email = "client2@slotik.test",
-                            FirstName = "Марія",
-                            LastName = "Клієнт",
-                            PasswordHash = "598e94d875ce2d6f38c297129b5c059afe1b4f6590682b19e27c3deecf6c4140",
-                            Phone = "+380501110002",
-                            Role = 0
-                        },
-                        new
-                        {
-                            Id = 910003,
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 8, 1, 10, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Email = "client3@slotik.test",
-                            FirstName = "Іван",
-                            LastName = "Клієнт",
-                            PasswordHash = "598e94d875ce2d6f38c297129b5c059afe1b4f6590682b19e27c3deecf6c4140",
-                            Phone = "+380501110003",
-                            Role = 0
-                        });
                 });
 
             modelBuilder.Entity("Slotik.Models.Booking", b =>

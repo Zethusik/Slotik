@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Slotik.Data;
@@ -11,9 +12,11 @@ using Slotik.Data;
 namespace Slotik.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922184616_SeedReviews")]
+    partial class SeedReviews
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1191,32 +1194,12 @@ namespace Slotik.Migrations
                         new
                         {
                             Id = 920001,
-                            Description = "Манікюр + гель-лак",
+                            Description = "Тестова послуга для перевірки записів майстра.",
                             DurationMin = 60,
                             Included = "Консультація та виконання послуги",
                             MasterId = 900001,
-                            Name = "Манікюр + гель-лак",
-                            Price = 300m
-                        },
-                        new
-                        {
-                            Id = 920002,
-                            Description = "Манікюр + гель",
-                            DurationMin = 60,
-                            Included = "Консультація та виконання послуги",
-                            MasterId = 900001,
-                            Name = "Манікюр + гель",
-                            Price = 250m
-                        },
-                        new
-                        {
-                            Id = 920003,
-                            Description = "Педикюр",
-                            DurationMin = 30,
-                            Included = "Консультація та виконання послуги",
-                            MasterId = 900001,
-                            Name = "Педикюр",
-                            Price = 801m
+                            Name = "Тестова послуга",
+                            Price = 800m
                         });
                 });
 
@@ -1283,9 +1266,9 @@ namespace Slotik.Migrations
                         new
                         {
                             Id = 900002,
-                            ExpiresAt = new DateTimeOffset(new DateTime(2026, 9, 24, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            ExpiresAt = new DateTimeOffset(new DateTime(2026, 9, 20, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             MasterId = 900002,
-                            Plan = 2,
+                            Plan = 0,
                             Status = 0
                         });
                 });

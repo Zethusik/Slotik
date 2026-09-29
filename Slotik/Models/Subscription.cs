@@ -10,8 +10,8 @@ public class Subscription
     public Master Master { get; set; } = null!;
 
     public SubscriptionPlan Plan { get; set; } = SubscriptionPlan.Free;
-    public DateTime ExpiresAt { get; set; }
-    public string Status { get; set; } = "active";
+    public DateTimeOffset ExpiresAt { get; set; }
+    public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Active;
 
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }

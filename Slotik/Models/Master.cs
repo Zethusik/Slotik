@@ -18,6 +18,10 @@ public class Master
     public int SlotStepMin { get; set; }
     public bool IsBlocked { get; set; } = false;
 
+    public string? Address { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+
     public ICollection<Service> Services { get; set; } = new List<Service>();
     public ICollection<Favorite> FavoritedBy { get; set; } = new List<Favorite>();
     public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();

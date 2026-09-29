@@ -434,6 +434,18 @@ public class AppDbContext : DbContext
             }
         );
 
+        // ==========================================
+        //         КАТЕГОРІЇ
+        // ==========================================
+
+        modelBuilder.Entity<Category>().HasData(
+            new Category { Id = 1, Name = "Манікюр", Icon = "hand-finger", IsHiddenFromCatalog = false },
+            new Category { Id = 2, Name = "Перукар", Icon = "scissors", IsHiddenFromCatalog = false },
+            new Category { Id = 3, Name = "Візаж", Icon = "sparkles", IsHiddenFromCatalog = false },
+            new Category { Id = 4, Name = "Брови та вії", Icon = "eye", IsHiddenFromCatalog = false },
+            new Category { Id = 5, Name = "Тату", Icon = "needle", IsHiddenFromCatalog = false }
+        );
+
 
         // ==========================================
         //         МІСТА ТА РАЙОНИ УКРАЇНИ

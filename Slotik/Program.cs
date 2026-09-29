@@ -49,13 +49,12 @@ public class Program
 
         builder.Services.AddEndpointsApiExplorer();
 
-        // Swagger configuration with JWT Bearer support
         builder.Services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
             {
                 Title = "Slotik API",
-                Version = "v1337 26.09.2026"
+                Version = "v1337 2.09.2026"
             });
 
             options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -95,6 +94,10 @@ public class Program
 
         builder.Services.AddScoped<SmtpSettings>();
         builder.Services.AddScoped<EmailService>();
+
+        builder.Services.Configure<CloudinarySettings>(
+            builder.Configuration.GetSection("CloudinarySettings"));
+        builder.Services.AddScoped<IPhotoService, PhotoService>();
 
         var app = builder.Build();
 

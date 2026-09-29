@@ -27,7 +27,7 @@ namespace Slotik.Controllers
 
             if (masterId.HasValue)
             {
-                query = query.Where(s => s.MasterId == masterId.Value);
+                query = query.Include(s=>s.Group).Where(s => s.MasterId == masterId.Value);
             }
 
             var services = await query
@@ -39,7 +39,11 @@ namespace Slotik.Controllers
                     price = s.Price,
                     durationMin = s.DurationMin,
                     description = s.Description,
-                    included = s.Included
+                    included = s.Included,
+                    groupId = s.GroupId,
+                    groupName = s.Group != null ? s.Group.Name : null,
+                    isPopular = s.IsPopular,
+                    sortOrder = s.SortOrder,
                 })
                 .ToListAsync();
 
@@ -78,12 +82,21 @@ namespace Slotik.Controllers
         [Authorize(Roles = "Superadmin")]
         public async Task<ActionResult> Create([FromBody] CreateServiceDTO dto)
         {
+            var maxSortOrder = await _context.Services
+                .Where(s =>
+                    s.MasterId == dto.MasterId &&
+                    s.GroupId == dto.GroupId)
+                .MaxAsync(s => (int?)s.SortOrder) ?? 0;
+
             Service sub = new Service
             {
                 MasterId = dto.MasterId,
                 DurationMin = dto.DurationMin,
                 Price = dto.Price,
                 Name = dto.Name,
+                GroupId = dto.GroupId,
+                IsPopular  = dto.IsPopular,
+                SortOrder = maxSortOrder+1,
             };
 
             _context.Services.Add(sub);
@@ -102,6 +115,9 @@ namespace Slotik.Controllers
             serviceToChange.DurationMin = dto.DurationMin;
             serviceToChange.Price = dto.Price;
             serviceToChange.Name = dto.Name;
+            serviceToChange.SortOrder = dto.SortOrder;
+            serviceToChange.GroupId = dto.GroupId;
+            serviceToChange.IsPopular = dto.IsPopular;
 
             await _context.SaveChangesAsync();
 

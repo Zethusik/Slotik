@@ -29,6 +29,8 @@ public class AppDbContext : DbContext
 
     public DbSet<PendingRegistration> PendingRegistrations { get; set; }
 
+    public DbSet<ServiceGroup> ServiceGroups { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -66,6 +68,19 @@ public class AppDbContext : DbContext
             .WithMany(s => s.Payments)
             .HasForeignKey(p => p.SubscriptionId)
             .OnDelete(DeleteBehavior.Cascade);
+
+
+        modelBuilder.Entity<ServiceGroup>()
+            .HasOne(g => g.Category)
+            .WithMany()
+            .HasForeignKey(g => g.CategoryId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Service>()
+            .HasOne(s => s.Group)
+            .WithMany(g => g.Services)
+            .HasForeignKey(s => s.GroupId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // ==========================================
         //         МАЙСТРИ З ФРІ ПЛАНОМ
@@ -252,7 +267,11 @@ public class AppDbContext : DbContext
                 Price = 300m,
 
                 Description = "Манікюр + гель-лак",
-                Included = "Консультація та виконання послуги"
+                Included = "Консультація та виконання послуги",
+
+                GroupId = 1,
+                IsPopular = true,
+                SortOrder = 2
             }
         );
 
@@ -268,7 +287,12 @@ public class AppDbContext : DbContext
                 Price = 250m,
 
                 Description = "Манікюр + гель",
-                Included = "Консультація та виконання послуги"   
+                Included = "Консультація та виконання послуги",
+
+
+                GroupId = 1,
+                IsPopular = true,
+                SortOrder = 1,
             }
         );
 
@@ -284,7 +308,11 @@ public class AppDbContext : DbContext
                Price = 801m,
 
                Description = "Педикюр",
-               Included = "Консультація та виконання послуги"   
+               Included = "Консультація та виконання послуги",
+
+               GroupId = 2,
+               IsPopular = false,
+               SortOrder = 3
            }
        );
 
@@ -431,6 +459,27 @@ public class AppDbContext : DbContext
 
                 Rating = 4,
                 Text = "Хороший майстер, прийду ще."
+            }
+        );
+
+        modelBuilder.Entity<ServiceGroup>().HasData(
+            new ServiceGroup
+            {
+                Id = 1,
+                Name = "Манікюр",
+                CategoryId = 1
+            },
+            new ServiceGroup
+            {
+                Id = 2,
+                Name = "Педикюр",
+                CategoryId = 1
+            },
+            new ServiceGroup
+            {
+                Id = 3,
+                Name = "Додатково",
+                CategoryId = 1
             }
         );
 

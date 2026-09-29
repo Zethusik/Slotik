@@ -12,5 +12,11 @@ namespace Slotik.DTO
         public decimal Price { get; set; }
         [Required(ErrorMessage = "Duration is required")]
         public int DurationMin { get; set; }
+
+        public int? GroupId { get; set; }
+
+        public bool IsPopular { get; set; }
+
+        public int SortOrder { get; set; }
     }
 }

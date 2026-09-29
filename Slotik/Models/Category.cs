@@ -9,4 +9,6 @@ public class Category
     public bool IsHiddenFromCatalog { get; set; } = true;
 
     public ICollection<Master> Masters { get; set; } = new List<Master>();
+    public ICollection<ServiceGroup> ServiceGroups { get; set; }
+    = new List<ServiceGroup>();
 }

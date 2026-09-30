@@ -54,7 +54,7 @@ public class Program
             options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
             {
                 Title = "Slotik API",
-                Version = "v1337 2.09.2026"
+                Version = "v1"
             });
 
             options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -64,7 +64,7 @@ public class Program
                 Scheme = "Bearer",
                 BearerFormat = "JWT",
                 In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-                Description = "Enter JWT token (the word 'Bearer' will be added automatically)"
+                Description = "Enter JWT token"
             });
 
             options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
@@ -84,10 +84,16 @@ public class Program
         });
 
         builder.Services.AddScoped<TokenService>();
+
+        // Allow localhost, Vercel, and project domains
         builder.Services.AddCors(o => o.AddPolicy("front", p =>
-             p.WithOrigins("http://localhost:5173")
+            p.SetIsOriginAllowed(origin =>
+                origin.StartsWith("http://localhost:") ||
+                origin.EndsWith(".vercel.app") ||
+                origin.Contains("slotik"))
             .AllowAnyHeader()
-            .AllowAnyMethod()));
+            .AllowAnyMethod()
+            .AllowCredentials()));
 
         builder.Services.Configure<SmtpSettings>(
             builder.Configuration.GetSection("SmtpSettings"));
@@ -105,20 +111,17 @@ public class Program
         {
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await context.Database.MigrateAsync();
-
             await DbInitializer.SeedDataAsync(context);
         }
 
-        if (app.Environment.IsDevelopment())
-        {
-            app.UseSwagger();
-            app.UseSwaggerUI();
-        }
+        app.UseSwagger();
+        app.UseSwaggerUI();
 
         app.UseHttpsRedirection();
 
-        app.UseAuthentication();
         app.UseCors("front");
+
+        app.UseAuthentication();
         app.UseAuthorization();
 
         app.MapControllers();

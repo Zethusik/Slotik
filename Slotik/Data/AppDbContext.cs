@@ -69,6 +69,11 @@ public class AppDbContext : DbContext
             .HasForeignKey(p => p.SubscriptionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // LiqPay
+        modelBuilder.Entity<Payment>()
+            .HasIndex(p => p.OrderId)
+            .IsUnique();
+
 
         modelBuilder.Entity<ServiceGroup>()
             .HasOne(g => g.Category)

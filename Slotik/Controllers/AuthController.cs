@@ -246,6 +246,42 @@ namespace Slotik.Controllers
 
         }
 
+        [HttpGet("Me")]
+
+        public async Task<ActionResult> CheckBoard(int id) 
+        {
+            var user = await _context.Users
+            .Include(u => u.Master)
+                .ThenInclude(m => m.Services)
+            .Include(u => u.Master)
+                .ThenInclude(m => m.Schedules)
+            .Include(u => u.Master)
+                .ThenInclude(m => m.Category)
+            .Include(u => u.Master)
+                .ThenInclude(m => m.Subscriptions)
+            .FirstOrDefaultAsync(u => u.Id == id);
+            if (user == null) { return NotFound(new { message = "User not found" });}
+
+
+
+            var boarded =
+                user.Master != null &&
+                user.Master.Services.Any() &&
+                user.Master.Schedules.Any() &&
+                user.Master.Category != null &&
+                !string.IsNullOrWhiteSpace(user.Master.About) &&
+                user.Master.Subscriptions.Any();
+
+            return Ok(new {
+                userId = id,
+                role = user.Role.ToString(),
+                masterId = user.Master?.Id,
+                isOnboardingCompleted = boarded
+            });
+
+
+        }
+
 
 
     }

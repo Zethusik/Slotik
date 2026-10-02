@@ -110,7 +110,7 @@ namespace Slotik.Controllers
             await _context.SaveChangesAsync();
 
             var confirmationLink =
-            $"https://localhost:7041/api/Auth/confirm?token={token}";
+            $"http://localhost:5173/confirm-email?token={Uri.EscapeDataString(token)}";
 
             await _eservice.SendConfirmationEmailAsync(user.Email, confirmationLink);
 
@@ -178,7 +178,7 @@ namespace Slotik.Controllers
             await _context.PendingResets.AddAsync(reset);
             await _context.SaveChangesAsync();
 
-            await _eservice.SendConfirmationCodeAsync(dto.Email, $"https://localhost:7041/api/Auth/confirmReset?token={token}");
+            await _eservice.SendConfirmationCodeAsync(dto.Email, $"http://localhost:5173/reset-password?token={Uri.EscapeDataString(token)}");
 
             return Ok("Check your Email");
 
@@ -234,6 +234,9 @@ namespace Slotik.Controllers
             if (user == null) { return BadRequest("User somehow deleted own account.");}
 
             user.PasswordHash = _tservice.HashSHA256(dto.NewPassword);
+
+            _context.PendingResets.Remove(reset);
+
             await _context.SaveChangesAsync();
 
             return Ok("Password Changed.");

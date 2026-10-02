@@ -41,7 +41,7 @@ namespace Slotik.Controllers
 
             var user = await _context.Users.Include(u=>u.Master).FirstOrDefaultAsync(u => u.Email == email);
 
-            if (user == null) { return Unauthorized("Wrong Email or Password"); };
+            if (user == null) { return Unauthorized(new { message = "Wrong Email or Password" }); };
 
             
 
@@ -53,7 +53,7 @@ namespace Slotik.Controllers
             }
             else 
             {
-                return Unauthorized("Wrong Email or Password");
+                return Unauthorized(new { message = "Wrong Email or Password" });
             }
             
         }
@@ -64,7 +64,7 @@ namespace Slotik.Controllers
             User user = new User();
 
             var exists = await _context.Users.AnyAsync(u => u.Phone == dto.Phone);
-            if (exists) { return Conflict("User with the same Phone already exists"); }
+            if (exists) { return Conflict(new { message = "User with the same Phone already exists" }); }
 
             user.Phone = dto.Phone;
 
@@ -73,10 +73,10 @@ namespace Slotik.Controllers
             user.PasswordHash = _tservice.HashSHA256(dto.Password);
 
             exists = await _context.Users.AnyAsync(u => u.Email == dto.Email.Trim().ToLowerInvariant());
-            if (exists) { return Conflict("User with the same Email already exists"); }
+            if (exists) { return Conflict(new { message = "User with the same Email already exists" }); }
 
             user.Email = dto.Email.Trim().ToLowerInvariant();
-            if (dto.Role == Models.Enums.UserRole.Superadmin.ToString()) { return Conflict("Cannot assign to SuperAdmin"); }
+            if (dto.Role == Models.Enums.UserRole.Superadmin.ToString()) { return Conflict(new { message = "Cannot assign to SuperAdmin" }); }
 
             if (dto.Role == "Client")
             {
@@ -105,7 +105,7 @@ namespace Slotik.Controllers
             {
                 _context.PendingRegistrations.Remove(ispending);
                 await _context.SaveChangesAsync();
-                return BadRequest("This Email is already on confirmation.");
+                return BadRequest(new { message = "This Email is already on confirmation." });
             }
 
             await _context.PendingRegistrations.AddAsync(pending);
@@ -117,24 +117,24 @@ namespace Slotik.Controllers
 
             await _eservice.SendConfirmationEmailAsync(user.Email, confirmationLink);
 
-            return Ok("Check your Email for Confirmation link.");
+            return Ok(new { message = "Check your Email for Confirmation link." });
         }
 
         [HttpGet("confirm")]
         public async Task<ActionResult> ConfirmEmail([FromQuery] string token) 
         {
-            if (string.IsNullOrEmpty(token)) { return BadRequest("Invalid token"); }
+            if (string.IsNullOrEmpty(token)) { return BadRequest(new { message = "Invalid token" }); }
             var tokenHash = _eservice.HashToken(token);
 
             var pending = await _context.PendingRegistrations.FirstOrDefaultAsync(x => x.TokenHash == tokenHash);
-            if (pending == null) { return BadRequest("Link Expired or has Email has been already confirmed."); }
+            if (pending == null) { return BadRequest(new { message = "Link Expired or has Email has been already confirmed." }); }
 
             if (pending.ExpiresAt < DateTime.UtcNow) {
             
                 _context.PendingRegistrations.Remove(pending);
                 await _context.SaveChangesAsync();
 
-                return BadRequest("Confirmation link Expired.");
+                return BadRequest(new { message = "Confirmation link Expired." });
             }
 
             var user = await _context.Users.AnyAsync(u => u.Email == pending.Email);
@@ -142,7 +142,7 @@ namespace Slotik.Controllers
             if (user)
             {
                
-                return BadRequest("User already exists with the same Email.");
+                return BadRequest(new { message = "User already exists with the same Email." });
             }
 
             var Auser = new User
@@ -159,7 +159,7 @@ namespace Slotik.Controllers
             _context.Users.Add(Auser);
             _context.PendingRegistrations.Remove(pending);
             await _context.SaveChangesAsync();
-            return Ok("Email confirmed! You can now log in.");
+            return Ok(new { message = "Email confirmed! You can now log in." });
         }
 
         [HttpPost("forgotPassword")]
@@ -167,7 +167,7 @@ namespace Slotik.Controllers
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
 
-            if (user == null) { return NotFound("No user with same mail address"); }
+            if (user == null) { return NotFound(new { message = "No user with same mail address" }); }
 
             var token = _eservice.GenerateEmailToken();
             PendingReset reset = new PendingReset
@@ -183,19 +183,19 @@ namespace Slotik.Controllers
 
             await _eservice.SendConfirmationCodeAsync(dto.Email, $"{_configuration["Frontend:BaseUrl"]}/reset-password?token={Uri.EscapeDataString(token)}");
 
-            return Ok("Check your Email");
+            return Ok(new { message = "Check your Email" });
 
         }
 
         [HttpGet("confirmReset")]
         public async Task<ActionResult> confirmResetPassword([FromQuery] string token)
         {
-            if (String.IsNullOrEmpty(token)) { return BadRequest("Bad Token."); }
+            if (String.IsNullOrEmpty(token)) { return BadRequest(new { message = "Bad Token." }); }
             var hashedToken = _eservice.HashToken(token);
 
             var reset = await _context.PendingResets.FirstOrDefaultAsync(r => r.codeHash == hashedToken);
 
-            if (reset == null) { return NotFound("Wrong token"); }
+            if (reset == null) { return NotFound(new { message = "Wrong token" }); }
 
             if (reset.codeExpiresAt < DateTime.UtcNow)
             {
@@ -203,7 +203,7 @@ namespace Slotik.Controllers
                 _context.PendingResets.Remove(reset);
                 await _context.SaveChangesAsync();
 
-                return BadRequest("Confirmation link Expired.");
+                return BadRequest(new { message = "Confirmation link Expired." });
             }
 
             var FinalToken = _eservice.GenerateEmailToken();
@@ -222,19 +222,19 @@ namespace Slotik.Controllers
         public async Task<ActionResult> resetPassword([FromBody] FinalResetDTO dto) 
         {
             var reset = await _context.PendingResets.FirstOrDefaultAsync(r=>r.finalTokenHash ==_eservice.HashToken(dto.Token));
-            if (reset == null) { return NotFound("Invalid Token"); }
+            if (reset == null) { return NotFound(new { message = "Invalid Token" }); }
 
             if (reset.finalExpiresAt < DateTime.UtcNow)
             {
                 _context.PendingResets.Remove(reset);
                 await _context.SaveChangesAsync();
 
-                return BadRequest("Token Expired.");
+                return BadRequest(new { message = "Token Expired." });
             }
 
             var user = await _context.Users.FirstOrDefaultAsync(u=>u.Email==reset.email);
 
-            if (user == null) { return BadRequest("User somehow deleted own account.");}
+            if (user == null) { return BadRequest(new { message = "User somehow deleted own account." });}
 
             user.PasswordHash = _tservice.HashSHA256(dto.NewPassword);
 
@@ -242,7 +242,7 @@ namespace Slotik.Controllers
 
             await _context.SaveChangesAsync();
 
-            return Ok("Password Changed.");
+            return Ok(new { message = "Password Changed." });
 
         }
 

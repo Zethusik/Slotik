@@ -17,7 +17,12 @@ public class AppDbContext : DbContext
     public DbSet<District> Districts { get; set; }
     public DbSet<Service> Services { get; set; }
     public DbSet<ServicePhoto> ServicePhotos { get; set; }
+
+
     public DbSet<Schedule> Schedules { get; set; }
+    public DbSet<ScheduleInterval> ScheduleIntervals { get; set; }
+
+
     public DbSet<DaysOff> DaysOff { get; set; }
     public DbSet<Booking> Bookings { get; set; }
     public DbSet<Review> Reviews { get; set; }
@@ -34,6 +39,31 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // ==========================================
+        // SCHEDULE
+        // ==========================================
+
+        modelBuilder.Entity<Schedule>()
+            .HasIndex(s =>
+                new
+                {
+                    s.MasterId,
+                    s.Weekday
+                })
+            .IsUnique();
+
+        modelBuilder.Entity<Schedule>()
+            .HasOne(s => s.Master)
+            .WithMany(m => m.Schedules)
+            .HasForeignKey(s => s.MasterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ScheduleInterval>()
+            .HasOne(i => i.Schedule)
+            .WithMany(s => s.Intervals)
+            .HasForeignKey(i => i.ScheduleId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<PendingRegistration>()
             .HasIndex(x => x.Email)

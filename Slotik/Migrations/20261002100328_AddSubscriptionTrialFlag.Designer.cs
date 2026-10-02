@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Slotik.Data;
@@ -11,9 +12,11 @@ using Slotik.Data;
 namespace Slotik.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002100328_AddSubscriptionTrialFlag")]
+    partial class AddSubscriptionTrialFlag
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1195,45 +1198,32 @@ namespace Slotik.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<TimeOnly?>("BreakEnd")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<TimeOnly?>("BreakStart")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
                     b.Property<bool>("IsWorking")
                         .HasColumnType("boolean");
 
                     b.Property<int>("MasterId")
                         .HasColumnType("integer");
 
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
                     b.Property<int>("Weekday")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("MasterId", "Weekday")
-                        .IsUnique();
+                    b.HasIndex("MasterId");
 
                     b.ToTable("Schedules");
-                });
-
-            modelBuilder.Entity("Slotik.Models.ScheduleInterval", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<TimeOnly>("EndTime")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<int>("ScheduleId")
-                        .HasColumnType("integer");
-
-                    b.Property<TimeOnly>("StartTime")
-                        .HasColumnType("time without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ScheduleId");
-
-                    b.ToTable("ScheduleIntervals");
                 });
 
             modelBuilder.Entity("Slotik.Models.Service", b =>
@@ -1685,17 +1675,6 @@ namespace Slotik.Migrations
                     b.Navigation("Master");
                 });
 
-            modelBuilder.Entity("Slotik.Models.ScheduleInterval", b =>
-                {
-                    b.HasOne("Slotik.Models.Schedule", "Schedule")
-                        .WithMany("Intervals")
-                        .HasForeignKey("ScheduleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Schedule");
-                });
-
             modelBuilder.Entity("Slotik.Models.Service", b =>
                 {
                     b.HasOne("Slotik.Models.ServiceGroup", "Group")
@@ -1781,11 +1760,6 @@ namespace Slotik.Migrations
                     b.Navigation("Services");
 
                     b.Navigation("Subscriptions");
-                });
-
-            modelBuilder.Entity("Slotik.Models.Schedule", b =>
-                {
-                    b.Navigation("Intervals");
                 });
 
             modelBuilder.Entity("Slotik.Models.Service", b =>

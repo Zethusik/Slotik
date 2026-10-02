@@ -9,9 +9,16 @@ public class Subscription
     public int MasterId { get; set; }
     public Master Master { get; set; } = null!;
 
-    public SubscriptionPlan Plan { get; set; } = SubscriptionPlan.Free;
-    public DateTimeOffset ExpiresAt { get; set; }
-    public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Active;
+    public SubscriptionPlan Plan { get; set; } =
+        SubscriptionPlan.Free;
 
-    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    public SubscriptionStatus Status { get; set; } =
+        SubscriptionStatus.Active;
+
+    public bool IsTrial { get; set; } = false;
+
+    public ICollection<Payment> Payments { get; set; } =
+        new List<Payment>();
 }

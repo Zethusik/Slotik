@@ -23,12 +23,14 @@ namespace Slotik.Controllers
         private readonly AppDbContext _context;
         private readonly TokenService _tservice;
         private readonly EmailService _eservice; // Email service with email token generating, hashing and sending logic
+        private readonly IConfiguration _configuration;
 
-        public AuthController(AppDbContext context,TokenService tservice, EmailService eservice)
+        public AuthController(AppDbContext context,TokenService tservice, EmailService eservice, IConfiguration configuration)
         {
             _context = context;
             _tservice = tservice;
             _eservice = eservice;
+            _configuration = configuration;
         }
 
         [HttpPost("login")]
@@ -109,8 +111,9 @@ namespace Slotik.Controllers
             await _context.PendingRegistrations.AddAsync(pending);
             await _context.SaveChangesAsync();
 
+
             var confirmationLink =
-            $"http://localhost:5173/confirm-email?token={Uri.EscapeDataString(token)}";
+            $"{_configuration["Frontend:BaseUrl"]}/confirm-email?token={Uri.EscapeDataString(token)}";
 
             await _eservice.SendConfirmationEmailAsync(user.Email, confirmationLink);
 
@@ -178,7 +181,7 @@ namespace Slotik.Controllers
             await _context.PendingResets.AddAsync(reset);
             await _context.SaveChangesAsync();
 
-            await _eservice.SendConfirmationCodeAsync(dto.Email, $"http://localhost:5173/reset-password?token={Uri.EscapeDataString(token)}");
+            await _eservice.SendConfirmationCodeAsync(dto.Email, $"{_configuration["Frontend:BaseUrl"]}/reset-password?token={Uri.EscapeDataString(token)}");
 
             return Ok("Check your Email");
 

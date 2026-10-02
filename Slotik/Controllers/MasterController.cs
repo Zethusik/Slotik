@@ -395,7 +395,7 @@ public class MasterController : ControllerBase
     }
 
     [HttpPost("test-seed/expire-in-10m")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> CreateTestMasterWith10mSub()
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "test10m@slotik.com");

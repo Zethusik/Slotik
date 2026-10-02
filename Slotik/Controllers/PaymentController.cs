@@ -142,6 +142,9 @@ public class PaymentController : ControllerBase
                     Status =
                         SubscriptionStatus.Pending,
 
+                    IsTrial = 
+                        false,
+
                     ExpiresAt =
                         DateTimeOffset.UtcNow
                 };
@@ -467,7 +470,11 @@ public class PaymentController : ControllerBase
             var subscription =
                 payment.Subscription;
 
-            var activeSubscription =
+            // ========================================
+            // ACTIVE PRO TRIAL
+            // ========================================
+
+            var activeTrial =
                 await _context.Subscriptions
                     .Where(s =>
                         s.MasterId ==
@@ -479,6 +486,35 @@ public class PaymentController : ControllerBase
                         s.Status ==
                             SubscriptionStatus.Active &&
 
+                        s.IsTrial &&
+
+                        s.Plan ==
+                            SubscriptionPlan.Pro &&
+
+                        s.ExpiresAt > now)
+                    .OrderByDescending(
+                        s => s.ExpiresAt)
+                    .FirstOrDefaultAsync(
+                        cancellationToken);
+
+            // ========================================
+            // ACTIVE PAID SUBSCRIPTION
+            // ========================================
+
+            var activePaidSubscription =
+                await _context.Subscriptions
+                    .Where(s =>
+                        s.MasterId ==
+                            subscription.MasterId &&
+
+                        s.Id !=
+                            subscription.Id &&
+
+                        s.Status ==
+                            SubscriptionStatus.Active &&
+
+                        !s.IsTrial &&
+
                         s.Plan !=
                             SubscriptionPlan.Free &&
 
@@ -488,26 +524,78 @@ public class PaymentController : ControllerBase
                     .FirstOrDefaultAsync(
                         cancellationToken);
 
-            // Same-plan renewal:
-            // preserve unused paid days.
-            if (activeSubscription != null &&
-                activeSubscription.Plan ==
-                subscription.Plan)
+            subscription.IsTrial = false;
+
+            // ========================================
+            // TRIAL PRO -> PAID PRO
+            // ========================================
+
+            if (subscription.Plan ==
+                    SubscriptionPlan.Pro &&
+                activeTrial != null)
+            {
+                var baseExpiresAt =
+                    activeTrial.ExpiresAt;
+
+                if (activePaidSubscription != null &&
+                    activePaidSubscription.Plan ==
+                        SubscriptionPlan.Pro &&
+                    activePaidSubscription.ExpiresAt >
+                        baseExpiresAt)
+                {
+                    baseExpiresAt =
+                        activePaidSubscription.ExpiresAt;
+                }
+
+                subscription.ExpiresAt =
+                    baseExpiresAt.AddDays(30);
+
+                activeTrial.Status =
+                    SubscriptionStatus.Cancelled;
+
+                // If there was an active Basic or previous Pro,
+                // the new paid Pro becomes the active subscription.
+                if (activePaidSubscription != null)
+                {
+                    activePaidSubscription.Status =
+                        SubscriptionStatus.Cancelled;
+                }
+            }
+
+            // ========================================
+            // SAME PLAN RENEWAL
+            // ========================================
+
+            // Basic -> Basic
+            // or Pro -> Pro.
+            else if (
+                activePaidSubscription != null &&
+                activePaidSubscription.Plan ==
+                    subscription.Plan)
             {
                 subscription.ExpiresAt =
-                    activeSubscription
+                    activePaidSubscription
                         .ExpiresAt
                         .AddDays(30);
 
-                activeSubscription.Status =
+                activePaidSubscription.Status =
                     SubscriptionStatus.Cancelled;
             }
+
+            // ========================================
+            // NEW PLAN / PLAN SWITCH
+            // ========================================
+
+            // 
+            // Free -> Basic
+            // Free -> Pro
+            // Basic -> Pro
+            // Pro -> Basic
             else
             {
-                // Basic <-> Pro switch.
-                if (activeSubscription != null)
+                if (activePaidSubscription != null)
                 {
-                    activeSubscription.Status =
+                    activePaidSubscription.Status =
                         SubscriptionStatus.Cancelled;
                 }
 

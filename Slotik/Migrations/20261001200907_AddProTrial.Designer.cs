@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Slotik.Data;
@@ -11,9 +12,11 @@ using Slotik.Data;
 namespace Slotik.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001200907_AddProTrial")]
+    partial class AddProTrial
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1392,9 +1395,6 @@ namespace Slotik.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsTrial")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("MasterId")
                         .HasColumnType("integer");
 
@@ -1415,7 +1415,6 @@ namespace Slotik.Migrations
                         {
                             Id = 900001,
                             ExpiresAt = new DateTimeOffset(new DateTime(2099, 12, 31, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            IsTrial = false,
                             MasterId = 900001,
                             Plan = 0,
                             Status = 0
@@ -1424,7 +1423,6 @@ namespace Slotik.Migrations
                         {
                             Id = 900002,
                             ExpiresAt = new DateTimeOffset(new DateTime(2026, 9, 24, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            IsTrial = false,
                             MasterId = 900002,
                             Plan = 2,
                             Status = 0

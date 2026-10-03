@@ -18,5 +18,7 @@ namespace Slotik.DTO
         public bool IsPopular { get; set; }
 
         public int SortOrder { get; set; }
+
+        public List<IFormFile> files { get; set; } = new List<IFormFile>();
     }
 }

@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
+using Slotik.Models;
 
 namespace Slotik.Services
 {
@@ -12,7 +13,7 @@ namespace Slotik.Services
 
         public TokenService(IConfiguration config) => _config = config;
 
-        public string GenerateToken(string email, string role)
+        public string GenerateToken(string email, string role, int userId)
         {
             var jwtsettings = _config.GetSection("JwtSettings");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtsettings["SecretKey"]));
@@ -22,6 +23,7 @@ namespace Slotik.Services
             {
                 new Claim(JwtRegisteredClaimNames.Sub, email),
                 new Claim(JwtRegisteredClaimNames.Jti,Guid.NewGuid().ToString()),
+                new Claim("userId", userId.ToString()),
                 new Claim(ClaimTypes.Role,role)
             };
 

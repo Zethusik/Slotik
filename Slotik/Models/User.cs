@@ -12,6 +12,8 @@ public class User
     public string PasswordHash { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Client;
     public long? TelegramChatId { get; set; }
+    public string AvatarUrl { get; set; } =string.Empty;
+    public string PhotoId { get; set; } = string.Empty;
 
     public Master? Master { get; set; }
     public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();

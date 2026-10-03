@@ -47,7 +47,7 @@ namespace Slotik.Controllers
 
             if (user.PasswordHash == _tservice.HashSHA256(password))
             {
-                var token = _tservice.GenerateToken(email, user.Role.ToString());
+                var token = _tservice.GenerateToken(email, user.Role.ToString(),user.Id);
 
                 return Ok(new { Token = token, Role = user.Role.ToString()});
             }

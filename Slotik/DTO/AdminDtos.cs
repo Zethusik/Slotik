@@ -42,6 +42,7 @@ public class MasterAdminDto
     public string Tariff { get; set; } = string.Empty;
     public bool IsBlocked { get; set; }
     public string AvatarUrl { get; set; } = string.Empty;
+    public string PhotoId { get; set; } = string.Empty;
     public string DistrictName { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
 
@@ -49,6 +50,8 @@ public class MasterAdminDto
     public string Slug { get; set; } = string.Empty;
     public double? Rating { get; set; }
     public int ClientsCount { get; set; }
+
+   
 }
 
 public class FullMasterDto

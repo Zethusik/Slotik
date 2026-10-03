@@ -2,7 +2,7 @@
 
 public class CreateMasterDto
 {
-    public int UserId { get; set; }
+    
     public int CategoryId { get; set; }
     public int DistrictId { get; set; }
     public string Slug { get; set; } = string.Empty;

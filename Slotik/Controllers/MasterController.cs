@@ -2,10 +2,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Slotik.Data;
 using Slotik.DTO;
 using Slotik.Models;
 using Slotik.Models.Enums;
+using Slotik.Services;
+using System.Security.Claims;
 
 namespace Slotik.Controllers;
 
@@ -14,10 +17,12 @@ namespace Slotik.Controllers;
 public class MasterController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IPhotoService _photoService;
 
-    public MasterController(AppDbContext context)
+    public MasterController(AppDbContext context, IPhotoService photoService)
     {
         _context = context;
+        _photoService = photoService;
     }
 
     [HttpGet]
@@ -101,7 +106,7 @@ public class MasterController : ControllerBase
                 IsBlocked = m.IsBlocked,
                 DistrictName = m.District?.Name ?? string.Empty,
                 CreatedAt = m.User.CreatedAt,
-                AvatarUrl = string.Empty,
+                AvatarUrl = m.User.AvatarUrl.IsNullOrEmpty() ? string.Empty : m.User.AvatarUrl,
                 Slug = m.Slug,
                 Rating = m.Bookings
                             .Where(b => b.Review != null)
@@ -111,7 +116,8 @@ public class MasterController : ControllerBase
                             .Where(b => b.Status == BookingStatus.Completed)
                             .Select(b => b.UserId)
                             .Distinct()
-                            .Count()
+                            .Count(),
+                PhotoId = m.User.PhotoId.IsNullOrEmpty() ? string.Empty : m.User.PhotoId,
             };
         }).ToList();
 
@@ -149,6 +155,8 @@ public class MasterController : ControllerBase
 
         if (master == null) return NotFound(new { message = "Master not found" });
 
+       
+
         return Ok(new
         {
             master.Id,
@@ -175,7 +183,9 @@ public class MasterController : ControllerBase
                 master.User.Phone,
                 master.User.CreatedAt
             },
-            master.Services
+            master.Services,
+            master.User.AvatarUrl,
+            master.User.PhotoId
         });
     }
 
@@ -214,16 +224,23 @@ public class MasterController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles ="Master,Superadmin")]
     public async Task<IActionResult> Create([FromBody] CreateMasterDto dto)
     {
-        var user = await _context.Users.FindAsync(dto.UserId);
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+       
+
+        var user = await _context.Users.FindAsync(UserId);
         if (user == null)
         {
-            return NotFound(new { message = $"User with Id {dto.UserId} not found" });
+            return NotFound(new { message = $"User with Id {UserId} not found" });
         }
 
-        var exists = await _context.Masters.AnyAsync(m => m.UserId == dto.UserId);
+        var exists = await _context.Masters.AnyAsync(m => m.UserId == UserId);
         if (exists)
         {
             return BadRequest(new { message = "Master for this user already exists" });
@@ -231,7 +248,7 @@ public class MasterController : ControllerBase
 
         var master = new Master
         {
-            UserId = dto.UserId,
+            UserId = UserId,
             CategoryId = dto.CategoryId,
             DistrictId = dto.DistrictId,
             Slug = dto.Slug,
@@ -242,6 +259,7 @@ public class MasterController : ControllerBase
             Address = dto.Address,
             Latitude = dto.Latitude,
             Longitude = dto.Longitude
+            
         };
 
         _context.Masters.Add(master);
@@ -251,10 +269,15 @@ public class MasterController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize]
-    public async Task<IActionResult> Update(int id, [FromBody] CreateMasterDto dto)
+    [Authorize(Roles = "Master,Superadmin")]
+    public async Task<IActionResult> Update( [FromBody] CreateMasterDto dto)
     {
-        var master = await _context.Masters.FindAsync(id);
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        var master = await _context.Masters.FindAsync(UserId);
         if (master == null) return NotFound(new { message = "Master not found" });
 
         master.Slug = dto.Slug;
@@ -264,7 +287,7 @@ public class MasterController : ControllerBase
         master.IsBlocked = dto.IsBlocked;
         master.CategoryId = dto.CategoryId;
         master.DistrictId = dto.DistrictId;
-        master.UserId = dto.UserId;
+        master.UserId = UserId;
         master.Address = dto.Address;
         master.Latitude = dto.Latitude;
         master.Longitude = dto.Longitude;

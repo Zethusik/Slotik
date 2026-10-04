@@ -138,6 +138,8 @@ public class MasterController : ControllerBase
             .Include(m => m.User)
             .Include(m => m.PortfolioPhotos)
             .Include(m=>m.Services)
+            .Include(m=>m.Subscriptions)
+            .ThenInclude(s=>s.Payments)
             .Include(m => m.District)
                 .ThenInclude(d => d.City)
             .FirstOrDefaultAsync(m => m.Id == id);
@@ -354,7 +356,7 @@ public class MasterController : ControllerBase
 
         if (dto.portfolioPhotos != null && dto.portfolioPhotos.Any())
         {
-            if (dto.portfolioPhotos.Count > 10) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
+            if (dto.portfolioPhotos.Count > (10-master.PortfolioPhotos.Count)) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
 
             foreach (var file in dto.portfolioPhotos)
             {
@@ -381,18 +383,13 @@ public class MasterController : ControllerBase
 
                 photos.Add(photo);
 
+
+
                 
 
             }
 
-            foreach (var photo in master.PortfolioPhotos.ToList())
-            {
-                var remResult =await _photoService.DeletePhotoAsync(photo.PhotoId);
-
-                if (remResult.Error != null) { return BadRequest(new { message = remResult.Error.Message }); }
-                _context.PortfolioPhotos.Remove(photo);
-                master.PortfolioPhotos.Remove(photo);
-            }
+            
 
             foreach (var photo in photos) { master.PortfolioPhotos.Add(photo); }
         }
@@ -424,6 +421,36 @@ public class MasterController : ControllerBase
         _context.Masters.Remove(master);
         await _context.SaveChangesAsync();
         return Ok(new { message = "Master deleted successfully" });
+    }
+
+    [HttpDelete("portfolio-photo/{id:int}")]
+    [Authorize(Roles = "Master")]
+    public async Task<ActionResult> DeletePhoto(int id) 
+    {
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        var master = await _context.Masters.Include(m=>m.PortfolioPhotos).FirstOrDefaultAsync(m => m.UserId==UserId);
+
+        if (master == null) return NotFound(new { message = "Master Not Found" });
+
+        var photo = master.PortfolioPhotos.FirstOrDefault(p=>p.Id == id);
+
+        if (photo == null) return NotFound(new { message = "Photo not found." });
+
+        var remResult = await _photoService.DeletePhotoAsync(photo.PhotoId);
+
+        if (remResult.Error != null) { return BadRequest(new { message = remResult.Error.Message }); }
+        _context.PortfolioPhotos.Remove(photo);
+        master.PortfolioPhotos.Remove(photo);
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message="Photo deleted."});
+
+
     }
 
     [HttpPatch("{id:int}/block")]

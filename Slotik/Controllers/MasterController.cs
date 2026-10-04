@@ -135,7 +135,11 @@ public class MasterController : ControllerBase
         var master = await _context.Masters
             .Include(m => m.User)
             .Include(m => m.Category)
+            .Include(m => m.User)
+            .Include(m => m.PortfolioPhotos)
+            .Include(m=>m.Services)
             .Include(m => m.District)
+                .ThenInclude(d => d.City)
             .FirstOrDefaultAsync(m => m.Id == id);
 
         if (master == null) return NotFound(new { message = "Master not found" });
@@ -225,7 +229,7 @@ public class MasterController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles ="Master,Superadmin")]
-    public async Task<IActionResult> Create([FromBody] CreateMasterDto dto)
+    public async Task<IActionResult> Create([FromForm] CreateMasterDto dto)
     {
         var userid = User.FindFirstValue("userId");
 
@@ -246,6 +250,39 @@ public class MasterController : ControllerBase
             return BadRequest(new { message = "Master for this user already exists" });
         }
 
+        List<PortfolioPhoto> photos = new List<PortfolioPhoto>();
+
+        if (dto.portfolioPhotos != null && dto.portfolioPhotos.Any()) {
+
+            if (dto.portfolioPhotos.Count > 10) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
+            foreach (var file in dto.portfolioPhotos)
+            {
+                if (file == null || file.Length == 0)
+                    return BadRequest("Corrupted file uploaded");
+
+                var result = await _photoService.AddPhotoAsync(file);
+
+                if (result.Error != null)
+                {
+                    return BadRequest(new
+                    {
+                        message = result.Error.Message
+                    });
+                }
+
+                PortfolioPhoto photo = new PortfolioPhoto
+                {
+                    PhotoId = result.PublicId,
+                    PhotoUrl = result.SecureUrl.AbsoluteUri,
+                    
+                };
+
+                
+               photos.Add(photo);
+
+            }
+        }
+
         var master = new Master
         {
             UserId = UserId,
@@ -255,10 +292,10 @@ public class MasterController : ControllerBase
             About = dto.About,
             ExperienceYears = dto.ExperienceYears,
             SlotStepMin = dto.SlotStepMin,
-            IsBlocked = dto.IsBlocked,
             Address = dto.Address,
             Latitude = dto.Latitude,
-            Longitude = dto.Longitude
+            Longitude = dto.Longitude,
+            PortfolioPhotos = photos
             
         };
 
@@ -268,26 +305,77 @@ public class MasterController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = master.Id }, master);
     }
 
-    [HttpPut("{id:int}")]
+    [HttpPut]
     [Authorize(Roles = "Master,Superadmin")]
-    public async Task<IActionResult> Update( [FromBody] CreateMasterDto dto)
+    public async Task<IActionResult> Update( [FromForm] CreateMasterDto dto)
     {
         var userid = User.FindFirstValue("userId");
 
         if (!int.TryParse(userid, out var UserId))
             return Unauthorized();
 
-        var master = await _context.Masters.FindAsync(UserId);
+        var master = await _context.Masters
+             .Include(m => m.PortfolioPhotos)
+             .FirstOrDefaultAsync(m => m.UserId == UserId);
+
         if (master == null) return NotFound(new { message = "Master not found" });
+
+        List<PortfolioPhoto> photos = new List<PortfolioPhoto>();
+
+        if (dto.portfolioPhotos != null && dto.portfolioPhotos.Any())
+        {
+            if (dto.portfolioPhotos.Count > 10) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
+
+            foreach (var file in dto.portfolioPhotos)
+            {
+                if (file == null || file.Length == 0)
+                    return BadRequest("Corrupted file uploaded");
+
+                var result = await _photoService.AddPhotoAsync(file);
+
+                if (result.Error != null)
+                {
+                    return BadRequest(new
+                    {
+                        message = result.Error.Message
+                    });
+                }
+
+                PortfolioPhoto photo = new PortfolioPhoto
+                {
+                    PhotoId = result.PublicId,
+                    PhotoUrl = result.SecureUrl.AbsoluteUri,
+
+                };
+
+
+                photos.Add(photo);
+
+                
+
+            }
+
+            foreach (var photo in master.PortfolioPhotos.ToList())
+            {
+                var remResult =await _photoService.DeletePhotoAsync(photo.PhotoId);
+
+                if (remResult.Error != null) { return BadRequest(new { message = remResult.Error.Message }); }
+                _context.PortfolioPhotos.Remove(photo);
+                master.PortfolioPhotos.Remove(photo);
+            }
+
+            foreach (var photo in photos) { master.PortfolioPhotos.Add(photo); }
+        }
+        
+
+
 
         master.Slug = dto.Slug;
         master.About = dto.About;
         master.ExperienceYears = dto.ExperienceYears;
         master.SlotStepMin = dto.SlotStepMin;
-        master.IsBlocked = dto.IsBlocked;
         master.CategoryId = dto.CategoryId;
         master.DistrictId = dto.DistrictId;
-        master.UserId = UserId;
         master.Address = dto.Address;
         master.Latitude = dto.Latitude;
         master.Longitude = dto.Longitude;

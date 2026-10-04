@@ -36,9 +36,17 @@ public class AppDbContext : DbContext
 
     public DbSet<ServiceGroup> ServiceGroups { get; set; }
 
+    public DbSet<PortfolioPhoto> PortfolioPhotos => Set<PortfolioPhoto>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<PortfolioPhoto>()
+            .HasOne(p => p.Master)
+            .WithMany(m => m.PortfolioPhotos)
+            .HasForeignKey(p => p.MasterId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // ==========================================
         // SCHEDULE

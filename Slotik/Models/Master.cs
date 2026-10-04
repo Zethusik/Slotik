@@ -29,4 +29,6 @@ public class Master
     public ICollection<Schedule> Schedules { get; set; } = new List<Schedule>();
     public ICollection<DaysOff> DaysOff { get; set; } = new List<DaysOff>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
+    public ICollection<PortfolioPhoto> PortfolioPhotos { get; set; } = new List<PortfolioPhoto>();
+
 }

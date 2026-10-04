@@ -172,7 +172,7 @@ namespace Slotik.Controllers
             if (serviceToChange == null) { return NotFound("Service Not Found."); }
             if (serviceToChange.MasterId != master.Id) { return Forbid(); }
 
-            serviceToChange.MasterId = dto.MasterId;
+            
             serviceToChange.DurationMin = dto.DurationMin;
             serviceToChange.Price = dto.Price;
             serviceToChange.Name = dto.Name;
@@ -180,51 +180,77 @@ namespace Slotik.Controllers
             serviceToChange.GroupId = dto.GroupId;
             serviceToChange.IsPopular = dto.IsPopular;
 
-            if (serviceToChange.Photos != null && serviceToChange.Photos.Any())
+
+
+
+
+            var sortorder = serviceToChange.Photos.Any()
+                ? serviceToChange.Photos.Max(p => p.SortOrder) + 1
+                : 1;
+            if (dto.files != null && dto.files.Any()  )
             {
-                foreach (var photo in serviceToChange.Photos)
+                if (serviceToChange.Photos.Count() + dto.files.Count() > 3) { return BadRequest(new { message = "Service must have only 3 photos" }); }
+                foreach (var file in dto.files)
                 {
-                    await _photoService.DeletePhotoAsync(photo.photoId);
-                    _context.ServicePhotos.Remove(photo);
+                    if (file == null || file.Length == 0)
+                        return BadRequest("Corrupted file uploaded");
 
-                }
-            }
+                    var result = await _photoService.AddPhotoAsync(file);
 
-            List<ServicePhoto> newPhotos = new List<ServicePhoto>();
-            var sortorder = 1;
-
-            foreach (var file in dto.files)
-            {
-                if (file == null || file.Length == 0)
-                    return BadRequest("Corrupted file uploaded");
-
-                var result = await _photoService.AddPhotoAsync(file);
-
-                if (result.Error != null)
-                {
-                    return BadRequest(new
+                    if (result.Error != null)
                     {
-                        message = result.Error.Message
-                    });
+                        return BadRequest(new
+                        {
+                            message = result.Error.Message
+                        });
+                    }
+
+                    ServicePhoto photo = new ServicePhoto
+                    {
+                        photoId = result.PublicId,
+                        PhotoUrl = result.SecureUrl.AbsoluteUri,
+                        ServiceId = serviceToChange.Id,
+                        SortOrder = sortorder,
+                    };
+
+                    sortorder++;
+                   serviceToChange.Photos.Add(photo);
+
                 }
-
-                ServicePhoto photo = new ServicePhoto
-                {
-                    photoId = result.PublicId,
-                    PhotoUrl = result.SecureUrl.AbsoluteUri,
-                    ServiceId = serviceToChange.Id,
-                    SortOrder = sortorder,
-                };
-
-                sortorder++;
-                newPhotos.Add(photo);
-
             }
-            serviceToChange.Photos = newPhotos;
+            
 
             await _context.SaveChangesAsync();
 
             return Ok(serviceToChange);
+        }
+
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Master")]
+        public async Task<ActionResult> deletePhoto( int id) {
+            var userid = User.FindFirstValue("userId");
+
+            if (!int.TryParse(userid, out var UserId))
+                return Unauthorized();
+
+            var master = await _context.Masters.FirstOrDefaultAsync(m => m.UserId == UserId);
+            if (master == null) { return NotFound(new{message="User does not have master profile." }); }
+
+            var photo = await _context.ServicePhotos.Include(sp=>sp.Service).FirstOrDefaultAsync(sp => sp.Id == id);
+
+            if (photo == null) { return NotFound(new { message="Service photo Not found."}); }
+
+            if (photo.Service.MasterId != master.Id) { return Forbid(); }
+
+            var remResult = await _photoService.DeletePhotoAsync(photo.photoId);
+
+            if (remResult.Error != null) { return BadRequest(new { message = remResult.Error.Message }); }
+            _context.ServicePhotos.Remove(photo);
+            
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Photo deleted." });
         }
     }
 }

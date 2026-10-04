@@ -229,20 +229,44 @@ public class MasterController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles ="Master,Superadmin")]
-    public async Task<IActionResult> Create([FromForm] CreateMasterDto dto)
+    public async Task<IActionResult> Create([FromForm] CreateMasterDto dto, [FromQuery] int? id)
     {
         var userid = User.FindFirstValue("userId");
 
         if (!int.TryParse(userid, out var UserId))
             return Unauthorized();
 
-       
+        var Role = User.FindFirstValue(ClaimTypes.Role);
 
-        var user = await _context.Users.FindAsync(UserId);
-        if (user == null)
+        if (Role.ToString() != "Master")
         {
-            return NotFound(new { message = $"User with Id {UserId} not found" });
+            if (id == null) { return BadRequest(new { message = "id is null" }); }
+            UserId = id.Value;
         }
+            var user = await _context.Users.FindAsync(UserId);
+
+
+            if (user == null)
+            {
+                return NotFound(new { message = $"User with Id {UserId} not found" });
+            }
+
+        if (user.Role != UserRole.Master)
+        {
+            return BadRequest(new
+            {
+                message = "Selected user does not have Master role."
+            });
+        }
+
+
+
+
+
+
+
+
+
 
         var exists = await _context.Masters.AnyAsync(m => m.UserId == UserId);
         if (exists)
@@ -307,12 +331,18 @@ public class MasterController : ControllerBase
 
     [HttpPut]
     [Authorize(Roles = "Master,Superadmin")]
-    public async Task<IActionResult> Update( [FromForm] CreateMasterDto dto)
+    public async Task<IActionResult> Update( [FromForm] CreateMasterDto dto, [FromQuery]int? id)
     {
         var userid = User.FindFirstValue("userId");
 
         if (!int.TryParse(userid, out var UserId))
             return Unauthorized();
+
+        if (User.FindFirstValue(ClaimTypes.Role).ToString() == "Superadmin")
+        {
+            if (id == null) { return BadRequest(new { message = "id is null" }); }
+            UserId = id.Value;
+        }
 
         var master = await _context.Masters
              .Include(m => m.PortfolioPhotos)

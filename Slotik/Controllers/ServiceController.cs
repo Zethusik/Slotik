@@ -152,16 +152,25 @@ namespace Slotik.Controllers
                 sub.Photos.Add(photo);
                 
             }
+            _context.Services.Add(sub);
             await _context.SaveChangesAsync();
             return Ok(sub);
         }
 
         [HttpPut("{id}")]
         [Authorize(Roles = "Master")]
-        public async Task<ActionResult> Update(int id, [FromBody] CreateServiceDTO dto)
+        public async Task<ActionResult> Update(int id, [FromForm] CreateServiceDTO dto)
         {
+            var userid = User.FindFirstValue("userId");
+            if (!int.TryParse(userid, out var UserId))
+                return Unauthorized();
+
+            var master = await _context.Masters.FirstOrDefaultAsync(m => m.UserId == UserId);
+            if (master == null) { return BadRequest(new { message="User does not have master profile."}); }
+
             var serviceToChange = await _context.Services.Include(s=>s.Photos).FirstOrDefaultAsync(s => s.Id == id);
             if (serviceToChange == null) { return NotFound("Service Not Found."); }
+            if (serviceToChange.MasterId != master.Id) { return Forbid(); }
 
             serviceToChange.MasterId = dto.MasterId;
             serviceToChange.DurationMin = dto.DurationMin;

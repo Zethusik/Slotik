@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
 using Slotik.Models;
+using Slotik.Services;
+using System.Security.Claims;
 
 namespace Slotik.Controllers
 {
@@ -13,10 +15,12 @@ namespace Slotik.Controllers
     public class ServicePhotoController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IPhotoService _photoService;
 
-        public ServicePhotoController(AppDbContext context)
+        public ServicePhotoController(AppDbContext context,IPhotoService photoService)
         {
             _context = context;
+            _photoService = photoService;
         }
 
         // GET /api/ServicePhoto?masterId=10
@@ -53,12 +57,28 @@ namespace Slotik.Controllers
         }
 
         [HttpDelete("{id:int}")]
-        [Authorize(Roles = "Superadmin")]
+        [Authorize(Roles = "Master")]
         public async Task<ActionResult> DeleteById(int id)
         {
-            var sphoto = await _context.ServicePhotos.FirstOrDefaultAsync(s => s.Id == id);
+            var userid = User.FindFirstValue("userId");
 
-            if (sphoto == null) { return NotFound("Service Photo Not Found."); }
+            if (!int.TryParse(userid, out var UserId))
+                return Unauthorized();
+            var master = await _context.Masters.FirstOrDefaultAsync(m => m.UserId == UserId);
+
+            if (master == null) { return NotFound(new { message="Master profile Not found."}); }
+
+            var sphoto = await _context.ServicePhotos.Include(s=>s.Service).FirstOrDefaultAsync(s => s.Id == id);
+            if (sphoto == null) { return NotFound(new { message="Photo not found"}); }
+
+            if (sphoto.Service == null) { return BadRequest(new { message="Photo is not related to any service."}); }
+
+            if (sphoto.Service.MasterId != master.Id) { return Forbid(); }
+
+
+            var remResult = await _photoService.DeletePhotoAsync(sphoto.photoId);
+
+            if (remResult.Error != null) { return BadRequest(new { message = remResult.Error.Message }); }
 
             _context.ServicePhotos.Remove(sphoto);
             await _context.SaveChangesAsync();

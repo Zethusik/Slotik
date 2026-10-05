@@ -43,10 +43,9 @@ public class PaymentController : ControllerBase
 
     [HttpPost("checkout")]
     [Authorize(Roles = "Master")]
-    public async Task<ActionResult<LiqPayCheckoutResponse>>
-        CreateCheckout(
-            [FromBody] CreatePaymentDto dto,
-            CancellationToken cancellationToken)
+    public async Task<ActionResult<LiqPayCheckoutResponse>> CreateCheckout(
+     [FromBody] CreatePaymentDto dto,
+     CancellationToken cancellationToken)
     {
         if (dto.Plan is not (
             SubscriptionPlan.Basic or
@@ -81,8 +80,7 @@ public class PaymentController : ControllerBase
 
         try
         {
-            amount =
-                _liqPay.GetPrice(dto.Plan);
+            amount = _liqPay.GetPrice(dto.Plan);
         }
         catch (ArgumentException)
         {
@@ -99,30 +97,6 @@ public class PaymentController : ControllerBase
         var orderId =
             $"slotik-sub-{Guid.NewGuid():N}";
 
-        LiqPayCheckoutResponse checkout;
-
-        try
-        {
-            checkout =
-                _liqPay.CreateCheckout(
-                    orderId,
-                    dto.Plan,
-                    amount);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogError(
-                ex,
-                "Unable to create LiqPay checkout " +
-                "for master {MasterId}.",
-                user.Master.Id);
-
-            return StatusCode(
-                StatusCodes
-                    .Status500InternalServerError,
-                "LiqPay is not configured correctly.");
-        }
-
         await using var transaction =
             await _context.Database
                 .BeginTransactionAsync(
@@ -133,52 +107,60 @@ public class PaymentController : ControllerBase
             var subscription =
                 new Subscription
                 {
-                    MasterId =
-                        user.Master.Id,
-
-                    Plan =
-                        dto.Plan,
-
-                    Status =
-                        SubscriptionStatus.Pending,
-
-                    IsTrial = 
-                        false,
-
-                    ExpiresAt =
-                        DateTimeOffset.UtcNow
+                    MasterId = user.Master.Id,
+                    Plan = dto.Plan,
+                    Status = SubscriptionStatus.Pending,
+                    IsTrial = false,
+                    ExpiresAt = DateTimeOffset.UtcNow
                 };
 
             var payment =
                 new Payment
                 {
-                    Subscription =
-                        subscription,
-
-                    OrderId =
-                        orderId,
-
-                    Amount =
-                        amount,
-
-                    Currency =
-                        "UAH",
-
-                    Status =
-                        PaymentStatus.Pending,
-
-                    CreatedAt =
-                        DateTimeOffset.UtcNow
+                    Subscription = subscription,
+                    OrderId = orderId,
+                    Amount = amount,
+                    Currency = "UAH",
+                    Status = PaymentStatus.Pending,
+                    CreatedAt = DateTimeOffset.UtcNow
                 };
 
-            _context.Subscriptions.Add(
-                subscription);
+            _context.Subscriptions.Add(subscription);
+            _context.Payments.Add(payment);
 
-            _context.Payments.Add(
-                payment);
-
+            // Після SaveChanges payment.Id вже буде створений
             await _context.SaveChangesAsync(
                 cancellationToken);
+
+            var resultUrl =
+                $"{_settings.ResultUrl.TrimEnd('/')}/payment/result?paymentId={payment.Id}";
+
+            LiqPayCheckoutResponse checkout;
+
+            try
+            {
+                checkout =
+                    _liqPay.CreateCheckout(
+                        orderId,
+                        dto.Plan,
+                        amount,
+                        resultUrl);
+            }
+            catch (InvalidOperationException ex)
+            {
+                await transaction.RollbackAsync(
+                    cancellationToken);
+
+                _logger.LogError(
+                    ex,
+                    "Unable to create LiqPay checkout " +
+                    "for master {MasterId}.",
+                    user.Master.Id);
+
+                return StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    "LiqPay is not configured correctly.");
+            }
 
             await transaction.CommitAsync(
                 cancellationToken);
@@ -193,7 +175,11 @@ public class PaymentController : ControllerBase
                 amount,
                 payment.Currency);
 
-            return Ok(checkout);
+            return Ok(new
+            {
+                paymentId = payment.Id,
+                checkout
+            });
         }
         catch
         {

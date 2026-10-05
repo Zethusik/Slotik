@@ -45,11 +45,12 @@ public class LiqPayService
     };
 
     public LiqPayCheckoutResponse CreateCheckout(
-        string orderId,
-        SubscriptionPlan plan,
-        decimal amount)
+    string orderId,
+    SubscriptionPlan plan,
+    decimal amount,
+    string resultUrl)
     {
-        EnsureCheckoutConfigured();
+        EnsureCheckoutConfigured(resultUrl);
 
         if (string.IsNullOrWhiteSpace(orderId))
         {
@@ -77,7 +78,7 @@ public class LiqPayService
             ["order_id"] = orderId,
             ["language"] = "uk",
             ["server_url"] = _settings.ServerUrl,
-            ["result_url"] = _settings.ResultUrl
+            ["result_url"] = resultUrl
         };
 
         var json = JsonSerializer.Serialize(payload);
@@ -409,7 +410,7 @@ public class LiqPayService
         }
     }
 
-    private void EnsureCheckoutConfigured()
+    private void EnsureCheckoutConfigured(string resultUrl)
     {
         EnsureKeysConfigured();
 
@@ -417,15 +418,14 @@ public class LiqPayService
                 _settings.ServerUrl,
                 UriKind.Absolute,
                 out var serverUri) ||
-            serverUri.Scheme !=
-            Uri.UriSchemeHttps)
+            serverUri.Scheme != Uri.UriSchemeHttps)
         {
             throw new InvalidOperationException(
                 "LiqPay ServerUrl must be a valid HTTPS URL.");
         }
 
         if (!Uri.TryCreate(
-                _settings.ResultUrl,
+                resultUrl,
                 UriKind.Absolute,
                 out _))
         {

@@ -33,7 +33,7 @@ namespace Slotik.Controllers
 
         [HttpGet("{Id}")]
         [Authorize]
-        public async Task<ActionResult> GetById(int id)
+        public async Task<ActionResult> GetById(int Id)
         {
             var sub = await _context.Users.Include(u => u.Master).Include(u => u.Favorites).Include(u => u.Notifications).Include(u => u.Bookings).FirstOrDefaultAsync(s => s.Id == id);
             if (sub == null) { return NotFound("User Not Found."); }

@@ -35,7 +35,7 @@ namespace Slotik.Controllers
         [Authorize]
         public async Task<ActionResult> GetById(int Id)
         {
-            var sub = await _context.Users.Include(u => u.Master).Include(u => u.Favorites).Include(u => u.Notifications).Include(u => u.Bookings).FirstOrDefaultAsync(s => s.Id == id);
+            var sub = await _context.Users.Include(u => u.Master).Include(u => u.Favorites).Include(u => u.Notifications).Include(u => u.Bookings).FirstOrDefaultAsync(s => s.Id == Id);
             if (sub == null) { return NotFound("User Not Found."); }
 
             return Ok(sub);

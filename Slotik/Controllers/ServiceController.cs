@@ -55,7 +55,7 @@ namespace Slotik.Controllers
             return Ok(services);
         }
 
-        [HttpGet("{Id}")]
+        [HttpGet("{id}")]
         [AllowAnonymous]
         public async Task<ActionResult> GetById(int id)
         {

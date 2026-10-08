@@ -7,7 +7,7 @@ namespace Slotik.DTO
         [Required(ErrorMessage = "Master id is required")]
         public int MasterId { get; set; }
         [Required(ErrorMessage = "Name is required")]
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         [Required(ErrorMessage = "Price is required")]
         public decimal Price { get; set; }
         [Required(ErrorMessage = "Duration is required")]

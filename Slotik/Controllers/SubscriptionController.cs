@@ -7,6 +7,7 @@ using Slotik.Data;
 using Slotik.DTO;
 using Slotik.Models;
 using Slotik.Models.Enums;
+using Slotik.Services;
 
 namespace Slotik.Controllers;
 
@@ -18,10 +19,51 @@ public class SubscriptionController : ControllerBase
 
     private const int ProTrialDays = 7;
 
+    private readonly LiqPayService _liqPay;
+
     public SubscriptionController(
-        AppDbContext context)
+        AppDbContext context, LiqPayService liqPay)
     {
         _context = context;
+        _liqPay = liqPay;
+    }
+
+
+    [HttpPost("free")]
+    [Authorize(Roles = "Master")]
+
+    public async Task<ActionResult> AssignFree() 
+    {
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        var master = await _context.Masters.Include(m=>m.Subscriptions).FirstOrDefaultAsync(m => m.UserId == UserId);
+        if (master == null) { return NotFound(new { message = "Master profile not found." }); }
+
+        var activeSub = master.Subscriptions
+                .Where(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > DateTimeOffset.UtcNow && s.Plan != SubscriptionPlan.Free)
+                .OrderByDescending(s => s.ExpiresAt)
+                .FirstOrDefault();
+
+        var freeplan = master.Subscriptions.FirstOrDefault(s => s.Plan == SubscriptionPlan.Free);
+
+        if (activeSub != null || freeplan != null) { return BadRequest(new { message = "You alredy have an active subscription" }); }
+
+        Subscription sub = new Subscription {
+        Plan= SubscriptionPlan.Free,
+        ExpiresAt = DateTimeOffset.MaxValue,
+        Status = SubscriptionStatus.Active,
+        MasterId = master.Id,
+        };
+
+        await _context.Subscriptions.AddAsync(sub);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Free plan assigned successfuly."});
+
+
     }
 
     // ================================
@@ -102,7 +144,12 @@ public class SubscriptionController : ControllerBase
             return Forbid();
         }
 
-        return Ok(sub);
+        DateTimeOffset? nextpayment = sub.ExpiresAt;
+        decimal price = 0;
+        if (sub.Plan == SubscriptionPlan.Free) { nextpayment = null; }
+        if (sub.Plan != SubscriptionPlan.Free) { price = _liqPay.GetPrice(sub.Plan); }
+
+        return Ok(new { Subscription = sub,billingPeriod="month",NextPaymentAt = nextpayment,nextPaymentAmount=price,Price=price,currency="UAH"});
     }
 
     // ================================

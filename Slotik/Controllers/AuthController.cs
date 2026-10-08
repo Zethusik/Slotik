@@ -252,13 +252,13 @@ namespace Slotik.Controllers
         {
             var user = await _context.Users
             .Include(u => u.Master)
-                .ThenInclude(m => m.Services)
+                .ThenInclude(m => m!.Services)
             .Include(u => u.Master)
-                .ThenInclude(m => m.Schedules)
+                .ThenInclude(m => m!.Schedules)
             .Include(u => u.Master)
-                .ThenInclude(m => m.Category)
+                .ThenInclude(m => m!.Category)
             .Include(u => u.Master)
-                .ThenInclude(m => m.Subscriptions)
+                .ThenInclude(m => m!.Subscriptions)
             .FirstOrDefaultAsync(u => u.Id == id);
             if (user == null) { return NotFound(new { message = "User not found" });}
 

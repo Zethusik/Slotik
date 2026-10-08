@@ -6,9 +6,9 @@ namespace Slotik.DTO
     {
         [Required(ErrorMessage = "Token is required")]
         [MinLength(6, ErrorMessage = "Token must contain at least 6 characters")]
-        public string Token { get; set; }
+        public string Token { get; set; } = string.Empty;
         [Required(ErrorMessage = "Password is required")]
         [MinLength(6, ErrorMessage = "Password must contain at least 6 characters")]
-        public string NewPassword { get; set; }
+        public string NewPassword { get; set; } = string.Empty;
     }
 }

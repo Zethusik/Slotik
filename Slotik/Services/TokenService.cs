@@ -16,7 +16,22 @@ namespace Slotik.Services
         public string GenerateToken(string email, string role, int userId)
         {
             var jwtsettings = _config.GetSection("JwtSettings");
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtsettings["SecretKey"]));
+
+            var secretKey = jwtsettings["SecretKey"] ?? throw new InvalidOperationException("JwtSettings:SecretKey is not configured.");
+
+            var issuer = jwtsettings["Issuer"] ?? throw new InvalidOperationException("JwtSettings:Issuer is not configured.");
+
+            var audience = jwtsettings["Audience"] ?? throw new InvalidOperationException("JwtSettings:Audience is not configured.");
+
+            var expiryValue = jwtsettings["ExpiryInMinutes"] ?? throw new InvalidOperationException("JwtSettings:ExpiryInMinutes is not configured.");
+
+            if (!double.TryParse( expiryValue,out var expiryInMinutes))
+            {
+                throw new InvalidOperationException(
+                    "JwtSettings:ExpiryInMinutes is invalid.");
+            }
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]
@@ -28,10 +43,10 @@ namespace Slotik.Services
             };
 
             var token = new JwtSecurityToken(
-                issuer: jwtsettings["Issuer"],
-                audience: jwtsettings["Audience"],
+                issuer: issuer,
+                audience: audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(double.Parse(jwtsettings["ExpiryInMinutes"])),
+                expires: DateTime.UtcNow.AddMinutes(expiryInMinutes),
                 signingCredentials: creds
                 );
 

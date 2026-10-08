@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using CloudinaryDotNet.Actions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -240,6 +241,9 @@ public class MasterController : ControllerBase
 
         var Role = User.FindFirstValue(ClaimTypes.Role);
 
+        if (Role == null)
+            return Unauthorized();
+
         if (Role.ToString() != "Master")
         {
             if (id == null) { return BadRequest(new { message = "id is null" }); }
@@ -340,7 +344,7 @@ public class MasterController : ControllerBase
         if (!int.TryParse(userid, out var UserId))
             return Unauthorized();
 
-        if (User.FindFirstValue(ClaimTypes.Role).ToString() == "Superadmin")
+        if (User.IsInRole("Superadmin"))
         {
             if (id == null) { return BadRequest(new { message = "id is null" }); }
             UserId = id.Value;

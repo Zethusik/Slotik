@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -17,11 +18,13 @@ namespace Slotik.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IPhotoService _photoService;
+        private readonly IMasterSubscriptionLock _masterLock;
 
-        public ServiceController(AppDbContext context, IPhotoService photoService)
+        public ServiceController(AppDbContext context, IPhotoService photoService, IMasterSubscriptionLock masterLock)
         {
             _context = context;
             _photoService = photoService;
+            _masterLock = masterLock;
         }
 
         [HttpGet]
@@ -60,9 +63,9 @@ namespace Slotik.Controllers
         public async Task<ActionResult> GetById(int id)
         {
             var service = await _context.Services
-                .Include(s => s.Master)
-                .Include(s => s.Photos)
-                .FirstOrDefaultAsync(s => s.Id == id);
+                .Where(s => s.Id == id)
+                .Select(ApiResponses.Service)
+                .FirstOrDefaultAsync();
 
             if (service == null) { return NotFound("Service Not Found."); }
 
@@ -84,6 +87,8 @@ namespace Slotik.Controllers
         }
 
         [HttpPost]
+        [ServiceFilter(typeof(ImageUploadFilter))]
+    [EnableRateLimiting("uploads")]
         [Authorize(Roles = "Master")]
         public async Task<ActionResult> Create([FromForm] CreateServiceDTO dto)
         {
@@ -93,9 +98,15 @@ namespace Slotik.Controllers
             if (!int.TryParse(userid, out var UserId))
                 return Unauthorized();
 
-            var master = await _context.Masters.FirstOrDefaultAsync(m => m.UserId == UserId);
+            var masterId = await _context.Masters.AsNoTracking().Where(m => m.UserId == UserId)
+                .Select(m => (int?)m.Id).SingleOrDefaultAsync();
+            if (masterId == null) return NotFound(new { message = "Not found Master profile." });
+            await using var transaction = await _masterLock.AcquireAsync(masterId.Value, HttpContext.RequestAborted);
+            var master = await _context.Masters.FirstOrDefaultAsync(m => m.Id == masterId.Value);
 
             if (master == null) { return NotFound(new { message = "Not found Master profile." }); }
+            if (dto.GroupId.HasValue && !await _context.ServiceGroups.AnyAsync(g => g.Id == dto.GroupId && g.CategoryId == master.CategoryId))
+                return BadRequest(new { error = "invalid_service_group", message = "Group must belong to the Master's category." });
 
             var maxSortOrder = await _context.Services
                 .Where(s =>
@@ -105,7 +116,7 @@ namespace Slotik.Controllers
 
             
 
-            if (!dto.files.Any() || dto.files == null || dto.files.Count() > 3) { return BadRequest(new { message = "No Photos or more than 3" }); }
+            if (dto.files == null || !dto.files.Any() || dto.files.Count > 3) { return BadRequest(new { message = "No Photos or more than 3" }); }
 
             
 
@@ -125,19 +136,21 @@ namespace Slotik.Controllers
 
            
             int sortorder = 1;
+            await using var batch = new PhotoUploadBatch(_photoService,
+                HttpContext.RequestServices.GetRequiredService<ILogger<ServiceController>>());
 
             foreach (var file in dto.files)
             {
                 if (file == null || file.Length == 0)
                     return BadRequest("Corrupted file uploaded");
 
-                var result = await _photoService.AddPhotoAsync(file);
+                var result = await batch.AddAsync(file);
 
-                if (result.Error != null)
+                if (PhotoUploadBatch.Failed(result))
                 {
                     return BadRequest(new
                     {
-                        message = result.Error.Message
+                        error = "image_upload_failed"
                     });
                 }
 
@@ -153,11 +166,15 @@ namespace Slotik.Controllers
                 
             }
             _context.Services.Add(sub);
-            await _context.SaveChangesAsync();
-            return Ok(sub);
+            await OnboardingService.SaveAndCompleteAsync(_context, master.Id);
+            await transaction.CommitAsync(HttpContext.RequestAborted);
+            batch.Commit();
+            return Ok(await _context.Services.Where(s => s.Id == sub.Id).Select(ApiResponses.Service).SingleAsync());
         }
 
         [HttpPut("{id}")]
+        [ServiceFilter(typeof(ImageUploadFilter))]
+    [EnableRateLimiting("uploads")]
         [Authorize(Roles = "Master")]
         public async Task<ActionResult> Update(int id, [FromForm] CreateServiceDTO dto)
         {
@@ -165,12 +182,22 @@ namespace Slotik.Controllers
             if (!int.TryParse(userid, out var UserId))
                 return Unauthorized();
 
-            var master = await _context.Masters.FirstOrDefaultAsync(m => m.UserId == UserId);
+            var masterId = await _context.Masters.AsNoTracking().Where(m => m.UserId == UserId)
+                .Select(m => (int?)m.Id).SingleOrDefaultAsync();
+            if (masterId == null) return NotFound(new { message = "Not found Master profile." });
+            await using var transaction = await _masterLock.AcquireAsync(masterId.Value, HttpContext.RequestAborted);
+            var master = await _context.Masters.FirstOrDefaultAsync(m => m.Id == masterId.Value);
             if (master == null) { return BadRequest(new { message="User does not have master profile."}); }
 
             var serviceToChange = await _context.Services.Include(s=>s.Photos).FirstOrDefaultAsync(s => s.Id == id);
             if (serviceToChange == null) { return NotFound("Service Not Found."); }
             if (serviceToChange.MasterId != master.Id) { return Forbid(); }
+            // Approved policy keeps the promised StartsAt/EndsAt unchanged.
+            if (serviceToChange.DurationMin != dto.DurationMin && await BookingMutationGuard
+                .FutureActive(_context, master.Id, DateTimeOffset.UtcNow).AnyAsync(b => b.ServiceId == id))
+                return Conflict(BookingMutationGuard.Conflict("service duration"));
+            if (dto.GroupId.HasValue && !await _context.ServiceGroups.AnyAsync(g => g.Id == dto.GroupId && g.CategoryId == master.CategoryId))
+                return BadRequest(new { error = "invalid_service_group", message = "Group must belong to the Master's category." });
 
             
             serviceToChange.DurationMin = dto.DurationMin;
@@ -187,6 +214,8 @@ namespace Slotik.Controllers
             var sortorder = serviceToChange.Photos.Any()
                 ? serviceToChange.Photos.Max(p => p.SortOrder) + 1
                 : 1;
+            await using var batch = new PhotoUploadBatch(_photoService,
+                HttpContext.RequestServices.GetRequiredService<ILogger<ServiceController>>());
             if (dto.files != null && dto.files.Any()  )
             {
                 if (serviceToChange.Photos.Count() + dto.files.Count() > 3) { return BadRequest(new { message = "Service must have only 3 photos" }); }
@@ -195,13 +224,13 @@ namespace Slotik.Controllers
                     if (file == null || file.Length == 0)
                         return BadRequest("Corrupted file uploaded");
 
-                    var result = await _photoService.AddPhotoAsync(file);
+                    var result = await batch.AddAsync(file);
 
-                    if (result.Error != null)
+                    if (PhotoUploadBatch.Failed(result))
                     {
                         return BadRequest(new
                         {
-                            message = result.Error.Message
+                            error = "image_upload_failed"
                         });
                     }
 
@@ -220,9 +249,11 @@ namespace Slotik.Controllers
             }
             
 
-            await _context.SaveChangesAsync();
+            await OnboardingService.SaveAndCompleteAsync(_context, master.Id);
+            await transaction.CommitAsync(HttpContext.RequestAborted);
+            batch.Commit();
 
-            return Ok(serviceToChange);
+            return Ok(await _context.Services.Where(s => s.Id == serviceToChange.Id).Select(ApiResponses.Service).SingleAsync());
         }
         //[HttpDelete("{id:int}")]
         //[Authorize(Roles = "Master")]

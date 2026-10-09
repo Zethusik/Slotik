@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -37,27 +37,8 @@ public class Program
                 options.DefaultChallengeScheme =
                     JwtBearerDefaults.AuthenticationScheme;
             })
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters =
-                    new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidateAudience = true,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-
-                        ValidIssuer =
-                            jwtSettings["Issuer"],
-
-                        ValidAudience =
-                            jwtSettings["Audience"],
-
-                        IssuerSigningKey =
-                            new SymmetricSecurityKey(
-                                Encoding.UTF8.GetBytes(secretKey))
-                    };
-            });
+            .AddJwtBearer(options => JwtSecurity.Configure(options, jwtSettings));
+        builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme).ValidateOnStart();
 
         // Controllers
         builder.Services
@@ -113,19 +94,23 @@ public class Program
 
         // Services
         builder.Services.AddScoped<TokenService>();
+        builder.Services.AddSingleton<PasswordService>();
+        builder.Services.AddScoped<IMasterSubscriptionLock, MasterSubscriptionLock>();
+        builder.Services.AddScoped<IUserWriteLock, UserWriteLock>();
+        builder.Services.AddSlotikAbuseProtection(builder.Configuration);
 
-        builder.Services.AddCors(options =>
-            options.AddPolicy(
-                "front",
-                policy =>
-                    policy
-                        .SetIsOriginAllowed(origin =>
-                            origin.StartsWith("http://localhost:")
-                            || origin.EndsWith(".vercel.app")
-                            || origin.Contains("slotik"))
-                        .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowCredentials()));
+        builder.Services.AddSlotikCors(builder.Configuration);
+        builder.Services.AddOptions<UploadSettings>().Bind(builder.Configuration.GetSection("Uploads"))
+            .Validate(s => s.MaxFileBytes > 0 && s.MaxFileBytes <= 20 * 1024 * 1024
+                && s.MaxRequestBytes >= s.MaxFileBytes && s.MaxRequestBytes <= 220 * 1024 * 1024
+                && s.MaxWidth is > 0 and <= 8192 && s.MaxHeight is > 0 and <= 8192
+                && s.MaxPixels is > 0 and <= 32_000_000 && s.AllowedFormats.Length > 0
+                && s.AllowedFormats.All(f => new[] { "JPEG", "PNG", "WEBP" }.Contains(f, StringComparer.OrdinalIgnoreCase)),
+                "Invalid upload limits/formats.").ValidateOnStart();
+        builder.Services.AddScoped<ImageUploadFilter>();
+        builder.Services.AddOptions<Microsoft.AspNetCore.Http.Features.FormOptions>()
+            .Configure<Microsoft.Extensions.Options.IOptions<UploadSettings>>((form, upload) =>
+                form.MultipartBodyLengthLimit = upload.Value.MaxFileBytes);
 
         builder.Services.Configure<SmtpSettings>(
             builder.Configuration.GetSection("SmtpSettings"));
@@ -144,34 +129,33 @@ public class Program
             .Bind(builder.Configuration.GetSection("LiqPay"))
             .Validate(
                 settings =>
-                    !string.IsNullOrWhiteSpace(settings.PublicKey)
-                    && !string.IsNullOrWhiteSpace(settings.PrivateKey),
+                    (!settings.IsEnabled || !string.IsNullOrWhiteSpace(settings.PublicKey))
+                    && (!settings.IsEnabled || !string.IsNullOrWhiteSpace(settings.PrivateKey)),
                 "LiqPay PublicKey and PrivateKey are required.")
             .Validate(
                 settings =>
-                    Uri.TryCreate(
+                    !settings.IsEnabled || (Uri.TryCreate(
                         settings.ServerUrl,
                         UriKind.Absolute,
-                        out var serverUri)
-                    && serverUri.Scheme == Uri.UriSchemeHttps,
+                        out var serverUri) && serverUri.Scheme == Uri.UriSchemeHttps),
                 "LiqPay ServerUrl must be a valid HTTPS URL.")
             .Validate(
                 settings =>
-                    Uri.TryCreate(
+                    !settings.IsEnabled || (Uri.TryCreate(
                         settings.ResultUrl,
                         UriKind.Absolute,
-                        out var resultUri)
-                    && (
-                        resultUri.Scheme == Uri.UriSchemeHttp
-                        || resultUri.Scheme == Uri.UriSchemeHttps
-                    ),
+                        out var resultUri) && (resultUri.Scheme == Uri.UriSchemeHttp || resultUri.Scheme == Uri.UriSchemeHttps)),
                 "LiqPay ResultUrl must be a valid HTTP/HTTPS URL.")
             .Validate(
                 settings =>
-                    settings.BasicPriceUah > 0
-                    && settings.ProPriceUah > 0,
+                    (!settings.IsEnabled || settings.BasicPriceUah > 0)
+                    && (!settings.IsEnabled || settings.ProPriceUah > 0),
                 "LiqPay tariff prices must be greater than zero.")
             .ValidateOnStart();
+
+        builder.Services.AddOptions<LiqPaySettings>().Validate(s =>
+            s.MaxReconciliationAttempts is >= 1 and <= 20 && s.ReconciliationIntervalSeconds is >= 30 and <= 3600
+            && s.ReconciliationMaxAgeDays is >= 1 and <= 90, "Invalid reconciliation limits.");
 
         builder.Services
             .AddHttpClient<LiqPayService>(client =>
@@ -192,8 +176,10 @@ public class Program
                 scope.ServiceProvider
                     .GetRequiredService<AppDbContext>();
 
-            await context.Database.MigrateAsync();
-            await DbInitializer.SeedDataAsync(context);
+            if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+                await context.Database.MigrateAsync();
+            if (app.Environment.IsDevelopment())
+                await DbInitializer.SeedDataAsync(context, app.Environment);
         }
 
         app.UseSwagger();
@@ -209,6 +195,7 @@ public class Program
 
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
 
         app.MapControllers();
 

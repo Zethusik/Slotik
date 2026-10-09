@@ -76,7 +76,7 @@ namespace Slotik.Controllers
             await _context.ServiceGroups.AddAsync(group);
             await _context.SaveChangesAsync();
 
-            return Ok(group);
+            return Ok(new { id = group.Id, name = group.Name, categoryId = group.CategoryId });
         }
     }
 }

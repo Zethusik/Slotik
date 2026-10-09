@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Slotik.Data;
 using Slotik.DTO;
 using Slotik.Models.Enums;
+using Slotik.Services;
 
 namespace Slotik.Controllers;
 
@@ -237,13 +238,7 @@ public class AdminController : ControllerBase
             });
         }
 
-        var activeSubscription = m.Subscriptions
-            .Where(s =>
-                s.Status == SubscriptionStatus.Active &&
-                s.ExpiresAt > DateTimeOffset.UtcNow &&
-                s.Plan != SubscriptionPlan.Free)
-            .OrderByDescending(s => s.ExpiresAt)
-            .FirstOrDefault();
+        var activeSubscription = EffectivePlanResolver.Resolve(m.Subscriptions, DateTimeOffset.UtcNow);
 
         var isBlocked = m.IsBlocked;
 
@@ -257,7 +252,7 @@ public class AdminController : ControllerBase
                 ? activeSubscription.Plan
                     .ToString()
                     .ToLower()
-                : "free";
+                : "none";
 
         var dto = new FullMasterDto
         {
@@ -275,7 +270,7 @@ public class AdminController : ControllerBase
             Status = currentStatus,
 
             SubscriptionUntil =
-                activeSubscription != null
+                activeSubscription != null && activeSubscription.Plan != SubscriptionPlan.Free
                     ? activeSubscription
                         .ExpiresAt
                         .ToString("O")
@@ -312,7 +307,7 @@ public class AdminController : ControllerBase
                 .Count()
         };
 
-        if (activeSubscription == null)
+        if (activeSubscription == null || activeSubscription.Plan == SubscriptionPlan.Free)
         {
             dto.BillingPeriod = null;
             dto.SubscriptionUntil = null;

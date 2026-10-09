@@ -77,7 +77,8 @@ public class LiqPayService
                 $"Slotik {plan} subscription for 30 days",
             ["order_id"] = orderId,
             ["language"] = "uk",
-            ["server_url"] = _settings.ServerUrl,
+            ["server_url"] =
+                $"{_settings.ServerUrl.TrimEnd('/')}/api/Payment/liqpay/callback",
             ["result_url"] = resultUrl
         };
 

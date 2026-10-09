@@ -1,4 +1,5 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.RateLimiting;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,19 +23,21 @@ public class PaymentController : ControllerBase
     private readonly LiqPaySettings _settings;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<PaymentController> _logger;
+    private readonly IMasterSubscriptionLock _masterLock;
 
     public PaymentController(
         AppDbContext context,
         LiqPayService liqPay,
         IOptions<LiqPaySettings> settings,
         IWebHostEnvironment environment,
-        ILogger<PaymentController> logger)
+        ILogger<PaymentController> logger, IMasterSubscriptionLock masterLock)
     {
         _context = context;
         _liqPay = liqPay;
         _settings = settings.Value;
         _environment = environment;
         _logger = logger;
+        _masterLock = masterLock;
     }
 
     // ================================
@@ -42,11 +45,13 @@ public class PaymentController : ControllerBase
     // ================================
 
     [HttpPost("checkout")]
+    [EnableRateLimiting("checkout")]
     [Authorize(Roles = "Master")]
     public async Task<ActionResult<LiqPayCheckoutResponse>> CreateCheckout(
      [FromBody] CreatePaymentDto dto,
      CancellationToken cancellationToken)
     {
+        if (!_settings.IsEnabled) return StatusCode(503, "Payments are not configured.");
         if (dto.Plan is not (
             SubscriptionPlan.Basic or
             SubscriptionPlan.Pro))
@@ -55,19 +60,15 @@ public class PaymentController : ControllerBase
                 "Only Basic and Pro plans can be purchased.");
         }
 
-        var email =
-            User.FindFirstValue(
-                JwtRegisteredClaimNames.Sub)
-            ?? User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
             return Unauthorized();
 
         var user = await _context.Users
             .Include(u => u.Master)
             .FirstOrDefaultAsync(
-                u => u.Email == email,
+                u => u.Id == userId.Value,
                 cancellationToken);
 
         if (user?.Master == null)
@@ -94,102 +95,32 @@ public class PaymentController : ControllerBase
                 "Tariff price is not configured.");
         }
 
-        var orderId =
-            $"slotik-sub-{Guid.NewGuid():N}";
+        await using var transaction = await _masterLock.AcquireAsync(user.Master.Id, cancellationToken);
+        if (await _context.Subscriptions.AnyAsync(s => s.MasterId == user.Master.Id
+            && s.Plan == dto.Plan && !s.IsTrial && s.Status == SubscriptionStatus.Active
+            && s.ExpiresAt > DateTimeOffset.UtcNow, cancellationToken))
+            return Conflict(new { error = "active_plan_already_exists",
+                message = "Wait until your current subscription to this plan expires before buying it again." });
 
-        await using var transaction =
-            await _context.Database
-                .BeginTransactionAsync(
-                    cancellationToken);
-
-        try
+        var orderId = $"slotik-sub-{Guid.NewGuid():N}";
+        var subscription = new Subscription { MasterId = user.Master.Id, Plan = dto.Plan,
+            Status = SubscriptionStatus.Pending, IsTrial = false, ExpiresAt = DateTimeOffset.UtcNow };
+        var payment = new Payment { Subscription = subscription, OrderId = orderId, Amount = amount,
+            Currency = "UAH", Status = PaymentStatus.Pending, CreatedAt = DateTimeOffset.UtcNow };
+        _context.Payments.Add(payment);
+        await _context.SaveChangesAsync(cancellationToken);
+        var resultUrl = $"{_settings.ResultUrl.TrimEnd('/')}/payment/result?paymentId={payment.Id}";
+        LiqPayCheckoutResponse checkout;
+        try { checkout = _liqPay.CreateCheckout(orderId, dto.Plan, amount, resultUrl); }
+        catch (InvalidOperationException)
         {
-            var subscription =
-                new Subscription
-                {
-                    MasterId = user.Master.Id,
-                    Plan = dto.Plan,
-                    Status = SubscriptionStatus.Pending,
-                    IsTrial = false,
-                    ExpiresAt = DateTimeOffset.UtcNow
-                };
-
-            var payment =
-                new Payment
-                {
-                    Subscription = subscription,
-                    OrderId = orderId,
-                    Amount = amount,
-                    Currency = "UAH",
-                    Status = PaymentStatus.Pending,
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-
-            _context.Subscriptions.Add(subscription);
-            _context.Payments.Add(payment);
-
-            // Після SaveChanges payment.Id вже буде створений
-            await _context.SaveChangesAsync(
-                cancellationToken);
-
-            var resultUrl =
-                $"{_settings.ResultUrl.TrimEnd('/')}/payment/result?paymentId={payment.Id}";
-
-            LiqPayCheckoutResponse checkout;
-
-            try
-            {
-                checkout =
-                    _liqPay.CreateCheckout(
-                        orderId,
-                        dto.Plan,
-                        amount,
-                        resultUrl);
-            }
-            catch (InvalidOperationException ex)
-            {
-                await transaction.RollbackAsync(
-                    cancellationToken);
-
-                _logger.LogError(
-                    ex,
-                    "Unable to create LiqPay checkout " +
-                    "for master {MasterId}.",
-                    user.Master.Id);
-
-                return StatusCode(
-                    StatusCodes.Status500InternalServerError,
-                    "LiqPay is not configured correctly.");
-            }
-
-            await transaction.CommitAsync(
-                cancellationToken);
-
-            _logger.LogInformation(
-                "Created LiqPay checkout {OrderId} " +
-                "for master {MasterId}, plan {Plan}, " +
-                "amount {Amount} {Currency}.",
-                orderId,
-                user.Master.Id,
-                dto.Plan,
-                amount,
-                payment.Currency);
-
-            return Ok(new
-            {
-                paymentId = payment.Id,
-                checkout
-            });
+            _logger.LogError("Unable to create LiqPay checkout for master {MasterId}.", user.Master.Id);
+            // Disposing the uncommitted lease rolls back the pending rows.
+            return StatusCode(500, "LiqPay is not configured correctly.");
         }
-        catch
-        {
-            await transaction.RollbackAsync(
-                cancellationToken);
-
-            throw;
-        }
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(new { paymentId = payment.Id, checkout });
     }
-
     // ================================
     // CALLBACK
     // ================================
@@ -204,6 +135,7 @@ public class PaymentController : ControllerBase
             [FromForm] string signature,
             CancellationToken cancellationToken)
     {
+        if (!_settings.IsEnabled) return StatusCode(503, "Payments are not configured.");
         if (!_liqPay.IsValidSignature(
                 data,
                 signature))
@@ -237,6 +169,11 @@ public class PaymentController : ControllerBase
                 "Invalid LiqPay callback data.");
         }
 
+        return await ApplyProviderStatusAsync(callback, cancellationToken);
+    }
+
+    private async Task<IActionResult> ApplyProviderStatusAsync(LiqPayCallbackDto callback, CancellationToken cancellationToken)
+    {
         if (!string.Equals(
                 callback.PublicKey,
                 _settings.PublicKey,
@@ -271,49 +208,18 @@ public class PaymentController : ControllerBase
                 "in production.");
         }
 
-        await using var transaction =
-            await _context.Database
-                .BeginTransactionAsync(
-                    cancellationToken);
-
-        var payment =
-            await _context.Payments
-                .Include(
-                    p => p.Subscription)
-                .FirstOrDefaultAsync(
-                    p =>
-                        p.OrderId ==
-                        callback.OrderId,
-                    cancellationToken);
-
-        if (payment == null)
-        {
-            await transaction.RollbackAsync(
-                cancellationToken);
-
-            _logger.LogWarning(
-                "LiqPay callback references " +
-                "unknown OrderId={OrderId}.",
-                callback.OrderId);
-
-            return NotFound(
-                "Payment not found.");
-        }
-
-        await _context.Database
-            .ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock({payment.Subscription.MasterId})",
-                cancellationToken);
-
-        await _context.Entry(payment)
-            .ReloadAsync(
-                cancellationToken);
-
-        await _context
-            .Entry(payment.Subscription)
-            .ReloadAsync(
-                cancellationToken);
-
+        var ownerId = await _context.Payments.AsNoTracking().Where(p => p.OrderId == callback.OrderId)
+            .Select(p => (int?)p.Subscription.MasterId).SingleOrDefaultAsync(cancellationToken);
+        if (ownerId == null) return NotFound("Payment not found.");
+        await using var transaction = await _masterLock.AcquireAsync(ownerId.Value, cancellationToken);
+        var payment = await _context.Payments.Include(p => p.Subscription)
+            .SingleOrDefaultAsync(p => p.OrderId == callback.OrderId, cancellationToken);
+        if (payment == null) return NotFound("Payment not found.");
+        // Reconciliation may already track these entities. Refresh under the lock.
+        await _context.Entry(payment).ReloadAsync(cancellationToken);
+        await _context.Entry(payment.Subscription).ReloadAsync(cancellationToken);
+        if (payment.Subscription.MasterId != ownerId.Value)
+            return Conflict(new { error = "payment_owner_changed" });
         if (callback.Amount !=
                 payment.Amount ||
             !string.Equals(
@@ -321,9 +227,6 @@ public class PaymentController : ControllerBase
                 payment.Currency,
                 StringComparison.OrdinalIgnoreCase))
         {
-            await transaction.RollbackAsync(
-                cancellationToken);
-
             _logger.LogWarning(
                 "LiqPay amount/currency mismatch " +
                 "for OrderId={OrderId}. " +
@@ -352,9 +255,10 @@ public class PaymentController : ControllerBase
         // override success/failure.
         if (callbackStatus == "reversed")
         {
-            ApplyReversedState(
-                payment,
-                providerPaymentId);
+            await ApplyReversedStateAsync(payment, providerPaymentId, cancellationToken);
+
+            if (payment.EntitlementReviewRequired)
+                _logger.LogError("Refund entitlement requires historical allocation review. PaymentId={PaymentId}, OrderId={OrderId}.", payment.Id, payment.OrderId);
 
             await _context.SaveChangesAsync(
                 cancellationToken);
@@ -391,10 +295,7 @@ public class PaymentController : ControllerBase
             return Ok();
         }
 
-        var isSuccessful =
-            callbackStatus is
-                "success" or
-                "sandbox";
+        var isSuccessful = LiqPayStatusPolicy.IsSuccessful(callbackStatus);
 
         if (isSuccessful)
         {
@@ -456,144 +357,10 @@ public class PaymentController : ControllerBase
             var subscription =
                 payment.Subscription;
 
-            // ========================================
-            // ACTIVE PRO TRIAL
-            // ========================================
-
-            var activeTrial =
-                await _context.Subscriptions
-                    .Where(s =>
-                        s.MasterId ==
-                            subscription.MasterId &&
-
-                        s.Id !=
-                            subscription.Id &&
-
-                        s.Status ==
-                            SubscriptionStatus.Active &&
-
-                        s.IsTrial &&
-
-                        s.Plan ==
-                            SubscriptionPlan.Pro &&
-
-                        s.ExpiresAt > now)
-                    .OrderByDescending(
-                        s => s.ExpiresAt)
-                    .FirstOrDefaultAsync(
-                        cancellationToken);
-
-            // ========================================
-            // ACTIVE PAID SUBSCRIPTION
-            // ========================================
-
-            var activePaidSubscription =
-                await _context.Subscriptions
-                    .Where(s =>
-                        s.MasterId ==
-                            subscription.MasterId &&
-
-                        s.Id !=
-                            subscription.Id &&
-
-                        s.Status ==
-                            SubscriptionStatus.Active &&
-
-                        !s.IsTrial &&
-
-                        s.Plan !=
-                            SubscriptionPlan.Free &&
-
-                        s.ExpiresAt > now)
-                    .OrderByDescending(
-                        s => s.ExpiresAt)
-                    .FirstOrDefaultAsync(
-                        cancellationToken);
-
-            subscription.IsTrial = false;
-
-            // ========================================
-            // TRIAL PRO -> PAID PRO
-            // ========================================
-
-            if (subscription.Plan ==
-                    SubscriptionPlan.Pro &&
-                activeTrial != null)
-            {
-                var baseExpiresAt =
-                    activeTrial.ExpiresAt;
-
-                if (activePaidSubscription != null &&
-                    activePaidSubscription.Plan ==
-                        SubscriptionPlan.Pro &&
-                    activePaidSubscription.ExpiresAt >
-                        baseExpiresAt)
-                {
-                    baseExpiresAt =
-                        activePaidSubscription.ExpiresAt;
-                }
-
-                subscription.ExpiresAt =
-                    baseExpiresAt.AddDays(30);
-
-                activeTrial.Status =
-                    SubscriptionStatus.Cancelled;
-
-                // If there was an active Basic or previous Pro,
-                // the new paid Pro becomes the active subscription.
-                if (activePaidSubscription != null)
-                {
-                    activePaidSubscription.Status =
-                        SubscriptionStatus.Cancelled;
-                }
-            }
-
-            // ========================================
-            // SAME PLAN RENEWAL
-            // ========================================
-
-            // Basic -> Basic
-            // or Pro -> Pro.
-            else if (
-                activePaidSubscription != null &&
-                activePaidSubscription.Plan ==
-                    subscription.Plan)
-            {
-                subscription.ExpiresAt =
-                    activePaidSubscription
-                        .ExpiresAt
-                        .AddDays(30);
-
-                activePaidSubscription.Status =
-                    SubscriptionStatus.Cancelled;
-            }
-
-            // ========================================
-            // NEW PLAN / PLAN SWITCH
-            // ========================================
-
-            // 
-            // Free -> Basic
-            // Free -> Pro
-            // Basic -> Pro
-            // Pro -> Basic
-            else
-            {
-                if (activePaidSubscription != null)
-                {
-                    activePaidSubscription.Status =
-                        SubscriptionStatus.Cancelled;
-                }
-
-                subscription.ExpiresAt =
-                    now.AddDays(30);
-            }
-
-            subscription.Status =
-                SubscriptionStatus.Active;
-
-            await _context.SaveChangesAsync(
-                cancellationToken);
+            var activated = await PaidPlanActivation.ApplyAsync(_context, payment, now, cancellationToken);
+            if (!activated)
+                _logger.LogWarning("Successful payment {PaymentId} requires entitlement review; no additional access was granted.", payment.Id);
+            await OnboardingService.SaveAndCompleteAsync(_context, subscription.MasterId, cancellationToken);
 
             await transaction.CommitAsync(
                 cancellationToken);
@@ -601,11 +368,12 @@ public class PaymentController : ControllerBase
             _logger.LogInformation(
                 "Payment {PaymentId} / {OrderId} " +
                 "succeeded. Subscription " +
-                "{SubscriptionId} active until " +
+                "{SubscriptionId}, activated={Activated}, expires " +
                 "{ExpiresAt}.",
                 payment.Id,
                 payment.OrderId,
                 subscription.Id,
+                activated,
                 subscription.ExpiresAt);
 
             return Ok();
@@ -668,6 +436,10 @@ public class PaymentController : ControllerBase
             return Ok();
         }
 
+        if (!LiqPayStatusPolicy.IsIntermediate(callbackStatus))
+            _logger.LogWarning("Unrecognized LiqPay state {Status} for order {OrderId}; retained without activation.", callbackStatus, payment.OrderId);
+        else
+            _logger.LogInformation("LiqPay intermediate state {Status} for order {OrderId}.", callbackStatus, payment.OrderId);
         // Intermediate provider states should
         // only be stored while our payment
         // itself is Pending.
@@ -776,6 +548,9 @@ public class PaymentController : ControllerBase
             });
         }
 
+        if (!await _context.EntitlementGrants.AnyAsync(g => g.PaymentId == payment.Id, cancellationToken))
+            return Conflict(new { error = "legacy_entitlement_review_required",
+                message = "Historical payment allocation must be reviewed before requesting a refund." });
         LiqPayRefundResponse refundResponse;
 
         try
@@ -1039,6 +814,57 @@ public class PaymentController : ControllerBase
     // GET PAYMENT
     // ================================
 
+    [HttpPost("{id:int}/reconcile")]
+    [Authorize(Roles = "Master,Superadmin")]
+    [EnableRateLimiting("reconcile")]
+    public async Task<IActionResult> Reconcile(int id, CancellationToken cancellationToken)
+    {
+        if (!_settings.IsEnabled) return StatusCode(503, "Payments are not configured.");
+        if (User.UserId() is not int userId) return Unauthorized();
+        var isAdmin = User.IsInRole("Superadmin");
+        var payment = await _context.Payments.Include(p => p.Subscription).ThenInclude(s => s.Master)
+            .SingleOrDefaultAsync(p => p.Id == id && (isAdmin || p.Subscription.Master.UserId == userId), cancellationToken);
+        if (payment == null) return NotFound();
+        // Claim a bounded attempt durably before network IO; callbacks are free to finish meanwhile.
+        await using (var transaction = await _context.Database.BeginTransactionAsync(cancellationToken))
+        {
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({payment.Subscription.MasterId})", cancellationToken);
+            await _context.Entry(payment).ReloadAsync(cancellationToken);
+            var now = DateTimeOffset.UtcNow;
+            if (payment.Status != PaymentStatus.Pending) return Ok(ApiResponses.Payment(payment));
+            if (payment.CreatedAt < now.AddDays(-_settings.ReconciliationMaxAgeDays)
+                || payment.ReconciliationAttempts >= _settings.MaxReconciliationAttempts)
+                return Conflict(new { error = "reconciliation_limit", message = "Operator investigation required." });
+            if (payment.LastReconciledAt > now.AddSeconds(-_settings.ReconciliationIntervalSeconds))
+                return StatusCode(429, new { error = "reconciliation_cooldown" });
+            payment.LastReconciledAt = now; payment.ReconciliationAttempts++;
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        LiqPayPaymentStatusResponse status;
+        try { status = await _liqPay.GetPaymentStatusAsync(payment.OrderId, cancellationToken); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            _logger.LogWarning("LiqPay reconciliation failed for payment {PaymentId}: {ErrorType}.", id, ex.GetType().Name);
+            return StatusCode(502, new { error = "provider_unavailable" });
+        }
+        // Never accept a partial status response as proof of payment ownership or amount.
+        if (!status.IsSuccess || status.PublicKey != _settings.PublicKey || status.OrderId != payment.OrderId
+            || status.Amount != payment.Amount || !string.Equals(status.Currency, payment.Currency, StringComparison.OrdinalIgnoreCase)
+            || status.PaymentId is not > 0
+            || (payment.ProviderPaymentId != null && payment.ProviderPaymentId != status.PaymentId.ToString()))
+            return StatusCode(502, new { error = "provider_status_mismatch" });
+        var applied = await ApplyProviderStatusAsync(new LiqPayCallbackDto
+        {
+            PublicKey = status.PublicKey, OrderId = status.OrderId!, Amount = status.Amount!.Value,
+            Currency = status.Currency!, PaymentId = status.PaymentId, Status = status.Status!
+        }, cancellationToken);
+        if (applied is not OkResult) return applied;
+        await _context.Entry(payment).ReloadAsync(cancellationToken);
+        return Ok(ApiResponses.Payment(payment));
+    }
+
     [HttpGet("{id:int}")]
     [Authorize(
         Roles = "Master,Superadmin")]
@@ -1063,29 +889,19 @@ public class PaymentController : ControllerBase
             return NotFound();
 
         if (User.IsInRole("Superadmin"))
-            return Ok(payment);
+            return Ok(ApiResponses.Payment(payment));
 
-        var email =
-            User.FindFirstValue(
-                JwtRegisteredClaimNames.Sub)
-            ?? User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
             return Unauthorized();
 
-        if (!string.Equals(
-                payment.Subscription
-                    .Master
-                    .User
-                    .Email,
-                email,
-                StringComparison.OrdinalIgnoreCase))
+        if (payment.Subscription.Master.UserId != userId.Value)
         {
             return Forbid();
         }
 
-        return Ok(payment);
+        return Ok(ApiResponses.Payment(payment));
     }
 
     // ================================
@@ -1133,9 +949,7 @@ public class PaymentController : ControllerBase
             .ReloadAsync(
                 cancellationToken);
 
-        ApplyReversedState(
-            payment,
-            providerPaymentId);
+        await ApplyReversedStateAsync(payment, providerPaymentId, cancellationToken);
 
         await _context.SaveChangesAsync(
             cancellationToken);
@@ -1146,46 +960,15 @@ public class PaymentController : ControllerBase
         return payment;
     }
 
-    private static bool
-        IsMatchingPaymentStatus(
-            LiqPayPaymentStatusResponse
-                providerStatus,
-            Payment payment)
-    {
-        var orderMatches =
-            string.IsNullOrWhiteSpace(
-                providerStatus.OrderId)
-            ||
-            string.Equals(
-                providerStatus.OrderId,
-                payment.OrderId,
-                StringComparison.Ordinal);
-
-        var amountMatches =
-            !providerStatus.Amount.HasValue
-            ||
-            providerStatus.Amount.Value ==
-            payment.Amount;
-
-        var currencyMatches =
-            string.IsNullOrWhiteSpace(
-                providerStatus.Currency)
-            ||
-            string.Equals(
-                providerStatus.Currency,
-                payment.Currency,
-                StringComparison
-                    .OrdinalIgnoreCase);
-
-        return
-            orderMatches &&
-            amountMatches &&
-            currencyMatches;
-    }
-
-    private static void ApplyReversedState(
+    private bool IsMatchingPaymentStatus(LiqPayPaymentStatusResponse status, Payment payment) =>
+        status.IsSuccess && status.PublicKey == _settings.PublicKey
+        && status.OrderId == payment.OrderId && status.Amount == payment.Amount
+        && string.Equals(status.Currency, payment.Currency, StringComparison.OrdinalIgnoreCase)
+        && status.PaymentId is > 0
+        && (payment.ProviderPaymentId == null || payment.ProviderPaymentId == status.PaymentId.ToString());
+    private async Task ApplyReversedStateAsync(
         Payment payment,
-        string? providerPaymentId)
+        string? providerPaymentId, CancellationToken cancellationToken)
     {
         payment.ProviderPaymentId =
             !string.IsNullOrWhiteSpace(
@@ -1199,8 +982,7 @@ public class PaymentController : ControllerBase
         payment.Status =
             PaymentStatus.Failed;
 
-        payment.Subscription.Status =
-            SubscriptionStatus.Cancelled;
+        await EntitlementService.RevokeAsync(_context, payment, DateTimeOffset.UtcNow, cancellationToken);
     }
 
     private static string NormalizeStatus(
@@ -1218,7 +1000,7 @@ public class PaymentController : ControllerBase
     {
         return status is
             "success"
-            or "sandbox"
+            or "sandbox" or "wait_compensation"
             or "failure"
             or "error"
             or "reversed";

@@ -39,6 +39,8 @@ public sealed class LiqPayRefundResponse
 
 public sealed class LiqPayPaymentStatusResponse
 {
+    [JsonPropertyName("public_key")]
+    public string? PublicKey { get; init; }
     [JsonPropertyName("result")]
     public string? Result { get; init; }
 

@@ -8,6 +8,7 @@ namespace Slotik.DTO
         public string Name { get; set; } = string.Empty;
 
         [Required]
+        [Range(1, int.MaxValue)]
         public int CategoryId { get; set; }
     }
 }

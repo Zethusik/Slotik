@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,50 +20,52 @@ public class SubscriptionController : ControllerBase
     private const int ProTrialDays = 7;
 
     private readonly LiqPayService _liqPay;
+    private readonly IMasterSubscriptionLock _masterLock;
 
     public SubscriptionController(
-        AppDbContext context, LiqPayService liqPay)
+        AppDbContext context, LiqPayService liqPay, IMasterSubscriptionLock masterLock)
     {
         _context = context;
         _liqPay = liqPay;
+        _masterLock = masterLock;
     }
 
 
     [HttpPost("free")]
     [Authorize(Roles = "Master")]
 
-    public async Task<ActionResult> AssignFree() 
+    public async Task<ActionResult> AssignFree(CancellationToken cancellationToken)
     {
-        var userid = User.FindFirstValue("userId");
+        if (User.UserId() is not int userId) return Unauthorized();
+        var masterId = await _context.Masters.Where(m => m.UserId == userId)
+            .Select(m => (int?)m.Id).SingleOrDefaultAsync(cancellationToken);
+        if (masterId == null) return NotFound(new { message = "Master profile not found." });
 
-        if (!int.TryParse(userid, out var UserId))
-            return Unauthorized();
+        await using var transaction = await _masterLock.AcquireAsync(masterId.Value, cancellationToken);
+        // Re-read under the lock: another request may have just committed the Free row.
+        var subscriptions = await _context.Subscriptions.Where(s => s.MasterId == masterId.Value)
+            .Include(s => s.Payments).ToListAsync(cancellationToken);
+        var free = subscriptions.FirstOrDefault(s => s.Plan == SubscriptionPlan.Free
+            && s.Status == SubscriptionStatus.Active && s.ExpiresAt == DateTimeOffset.MaxValue && !s.IsTrial);
+        if (free != null)
+        {
+            await OnboardingService.SaveAndCompleteAsync(_context, masterId.Value, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Ok(await ResponseAsync(free, cancellationToken));
+        }
+        // Preserve the existing refusal to recreate/reactivate historical Free subscriptions.
+        if (subscriptions.Any(s => s.Plan == SubscriptionPlan.Free))
+            return BadRequest(new { error = "existing_free_subscription", message = "An existing Free subscription requires review." });
+        if (subscriptions.Any(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > DateTimeOffset.UtcNow
+            && s.Plan is SubscriptionPlan.Basic or SubscriptionPlan.Pro))
+            return Conflict(new { error = "active_paid_subscription", message = "An active paid subscription cannot be replaced by Free." });
 
-        var master = await _context.Masters.Include(m=>m.Subscriptions).FirstOrDefaultAsync(m => m.UserId == UserId);
-        if (master == null) { return NotFound(new { message = "Master profile not found." }); }
-
-        var activeSub = master.Subscriptions
-                .Where(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > DateTimeOffset.UtcNow && s.Plan != SubscriptionPlan.Free)
-                .OrderByDescending(s => s.ExpiresAt)
-                .FirstOrDefault();
-
-        var freeplan = master.Subscriptions.FirstOrDefault(s => s.Plan == SubscriptionPlan.Free);
-
-        if (activeSub != null || freeplan != null) { return BadRequest(new { message = "You alredy have an active subscription" }); }
-
-        Subscription sub = new Subscription {
-        Plan= SubscriptionPlan.Free,
-        ExpiresAt = DateTimeOffset.MaxValue,
-        Status = SubscriptionStatus.Active,
-        MasterId = master.Id,
-        };
-
-        await _context.Subscriptions.AddAsync(sub);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = "Free plan assigned successfuly."});
-
-
+        free = new Subscription { MasterId = masterId.Value, Plan = SubscriptionPlan.Free,
+            Status = SubscriptionStatus.Active, ExpiresAt = DateTimeOffset.MaxValue, IsTrial = false };
+        _context.Subscriptions.Add(free);
+        await OnboardingService.SaveAndCompleteAsync(_context, masterId.Value, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(await ResponseAsync(free, cancellationToken));
     }
 
     // ================================
@@ -83,12 +85,12 @@ public class SubscriptionController : ControllerBase
                     .Include(s => s.Master)
                     .ToListAsync();
 
-            return Ok(allSubscriptions);
+            return Ok(Responses(allSubscriptions));
         }
 
-        var email = GetCurrentEmail();
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
             return Unauthorized();
 
         var subscriptions =
@@ -98,10 +100,10 @@ public class SubscriptionController : ControllerBase
                 .Include(s => s.Master)
                     .ThenInclude(m => m.User)
                 .Where(s =>
-                    s.Master.User.Email == email)
+                    s.Master.UserId == userId.Value)
                 .ToListAsync();
 
-        return Ok(subscriptions);
+        return Ok(Responses(subscriptions));
     }
 
     // ================================
@@ -129,27 +131,19 @@ public class SubscriptionController : ControllerBase
         }
 
         if (User.IsInRole("Superadmin"))
-            return Ok(sub);
+            return Ok(await ResponseAsync(sub));
 
-        var email = GetCurrentEmail();
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
             return Unauthorized();
 
-        if (!string.Equals(
-                sub.Master.User.Email,
-                email,
-                StringComparison.OrdinalIgnoreCase))
+        if (sub.Master.UserId != userId.Value)
         {
             return Forbid();
         }
 
-        DateTimeOffset? nextpayment = sub.ExpiresAt;
-        decimal price = 0;
-        if (sub.Plan == SubscriptionPlan.Free) { nextpayment = null; }
-        if (sub.Plan != SubscriptionPlan.Free) { price = _liqPay.GetPrice(sub.Plan); }
-
-        return Ok(new { Subscription = sub,billingPeriod="month",NextPaymentAt = nextpayment,nextPaymentAmount=price,Price=price,currency="UAH"});
+        return Ok(await ResponseAsync(sub));
     }
 
     // ================================
@@ -162,9 +156,9 @@ public class SubscriptionController : ControllerBase
         GetProTrialAvailability(
             CancellationToken cancellationToken)
     {
-        var email = GetCurrentEmail();
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
             return Unauthorized();
 
         var master =
@@ -172,7 +166,7 @@ public class SubscriptionController : ControllerBase
                 .AsNoTracking()
                 .Include(m => m.User)
                 .FirstOrDefaultAsync(
-                    m => m.User.Email == email,
+                    m => m.UserId == userId.Value,
                     cancellationToken);
 
         if (master == null)
@@ -233,15 +227,15 @@ public class SubscriptionController : ControllerBase
     public async Task<ActionResult> StartProTrial(
         CancellationToken cancellationToken)
     {
-        var email = GetCurrentEmail();
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
             return Unauthorized();
 
         var masterId =
             await _context.Masters
                 .Where(m =>
-                    m.User.Email == email)
+                    m.UserId == userId.Value)
                 .Select(m =>
                     (int?)m.Id)
                 .FirstOrDefaultAsync(
@@ -253,15 +247,7 @@ public class SubscriptionController : ControllerBase
                 "Master not found.");
         }
 
-        await using var transaction =
-            await _context.Database
-                .BeginTransactionAsync(
-                    cancellationToken);
-
-        await _context.Database
-            .ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock({masterId.Value})",
-                cancellationToken);
+        await using var transaction = await _masterLock.AcquireAsync(masterId.Value, cancellationToken);
 
         var master =
             await _context.Masters
@@ -271,9 +257,6 @@ public class SubscriptionController : ControllerBase
 
         if (master == null)
         {
-            await transaction.RollbackAsync(
-                cancellationToken);
-
             return NotFound(
                 "Master not found.");
         }
@@ -282,9 +265,6 @@ public class SubscriptionController : ControllerBase
         // once per acc
         if (master.ProTrialUsedAt != null)
         {
-            await transaction.RollbackAsync(
-                cancellationToken);
-
             return Conflict(new
             {
                 error = "trial_already_used",
@@ -310,9 +290,6 @@ public class SubscriptionController : ControllerBase
 
         if (hasActivePro)
         {
-            await transaction.RollbackAsync(
-                cancellationToken);
-
             return Conflict(new
             {
                 error = "active_pro_exists",
@@ -343,8 +320,10 @@ public class SubscriptionController : ControllerBase
         _context.Subscriptions.Add(
             trialSubscription);
 
-        await _context.SaveChangesAsync(
-            cancellationToken);
+        await OnboardingService.SaveAndCompleteAsync(_context, master.Id, cancellationToken);
+
+        await EntitlementService.RecordTrialAsync(_context, trialSubscription, now, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
 
         await transaction.CommitAsync(
             cancellationToken);
@@ -359,15 +338,7 @@ public class SubscriptionController : ControllerBase
 
             isTrial = true,
 
-            subscription = new
-            {
-                trialSubscription.Id,
-                trialSubscription.MasterId,
-                trialSubscription.Plan,
-                trialSubscription.Status,
-                trialSubscription.IsTrial,
-                trialSubscription.ExpiresAt
-            }
+            subscription = await ResponseAsync(trialSubscription, cancellationToken)
         });
     }
 
@@ -380,6 +351,14 @@ public class SubscriptionController : ControllerBase
     public async Task<ActionResult> DeleteById(
         int id)
     {
+        var ownerId = await _context.Subscriptions.AsNoTracking().Where(s => s.Id == id)
+            .Select(s => (int?)s.MasterId).SingleOrDefaultAsync();
+        if (ownerId == null) return NotFound();
+        await using var billingTransaction = await _context.Database.BeginTransactionAsync();
+        await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({ownerId.Value})");
+
+        if (await _context.EntitlementGrants.AnyAsync(g => g.SourceSubscriptionId == id))
+            return Conflict(new { error = "managed_entitlement", message = "Use the payment/refund flow for managed billing periods." });
         var sub =
             await _context.Subscriptions
                 .FirstOrDefaultAsync(
@@ -394,6 +373,7 @@ public class SubscriptionController : ControllerBase
         _context.Subscriptions.Remove(sub);
 
         await _context.SaveChangesAsync();
+        await billingTransaction.CommitAsync();
 
         return Ok(
             "Subscription is deleted");
@@ -409,6 +389,12 @@ public class SubscriptionController : ControllerBase
     public async Task<ActionResult> Create(
         [FromBody] CreateSubscriptionDTO dto)
     {
+        if (!await _context.Masters.AnyAsync(m => m.Id == dto.MasterId)) return NotFound("Master not found");
+        await using var billingTransaction = await _context.Database.BeginTransactionAsync();
+        await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({dto.MasterId})");
+        if (dto.Plan != SubscriptionPlan.Free && await _context.EntitlementGrants.AnyAsync(g => g.MasterId == dto.MasterId))
+            return Conflict(new { error = "managed_entitlement" });
+
         var sub =
             new Subscription
             {
@@ -429,9 +415,10 @@ public class SubscriptionController : ControllerBase
 
         _context.Subscriptions.Add(sub);
 
-        await _context.SaveChangesAsync();
+        await OnboardingService.SaveAndCompleteAsync(_context, dto.MasterId);
+        await billingTransaction.CommitAsync();
 
-        return Ok(sub);
+        return Ok(await ResponseAsync(sub));
     }
 
     // ================================
@@ -445,6 +432,18 @@ public class SubscriptionController : ControllerBase
         int id,
         [FromBody] CreateSubscriptionDTO dto)
     {
+        if (!await _context.Masters.AnyAsync(m => m.Id == dto.MasterId)) return NotFound("Master not found");
+        var ownerId = await _context.Subscriptions.AsNoTracking().Where(s => s.Id == id)
+            .Select(s => (int?)s.MasterId).SingleOrDefaultAsync();
+        if (ownerId == null) return NotFound();
+        await using var billingTransaction = await _context.Database.BeginTransactionAsync();
+        foreach (var masterId in new[] { ownerId.Value, dto.MasterId }.Distinct().Order())
+            await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({masterId})");
+        if (await _context.EntitlementGrants.AnyAsync(g => g.MasterId == ownerId.Value || g.MasterId == dto.MasterId))
+            return Conflict(new { error = "managed_entitlement" });
+
+        if (await _context.EntitlementGrants.AnyAsync(g => g.SourceSubscriptionId == id))
+            return Conflict(new { error = "managed_entitlement", message = "Use the payment/refund flow for managed billing periods." });
         var subToChange =
             await _context.Subscriptions
                 .FirstOrDefaultAsync(
@@ -469,21 +468,27 @@ public class SubscriptionController : ControllerBase
             dto.ExpiresAt;
 
         await _context.SaveChangesAsync();
+        await billingTransaction.CommitAsync();
 
-        return Ok(subToChange);
+        return Ok(await ResponseAsync(subToChange));
     }
 
     // ================================
     // HELPERS
     // ================================
 
-    private string? GetCurrentEmail()
+    private IEnumerable<SubscriptionResponse> Responses(List<Subscription> subscriptions)
     {
-        return
-            User.FindFirstValue(
-                JwtRegisteredClaimNames.Sub)
-            ??
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var now = DateTimeOffset.UtcNow;
+        var effective = subscriptions.GroupBy(s => s.MasterId)
+            .ToDictionary(g => g.Key, g => EffectivePlanResolver.Resolve(g, now)?.Id);
+        return subscriptions.Select(s => ApiResponses.Subscription(s, _liqPay, effective[s.MasterId]));
     }
+
+    private async Task<SubscriptionResponse> ResponseAsync(Subscription subscription, CancellationToken ct = default)
+    {
+        var all = await _context.Subscriptions.AsNoTracking().Where(s => s.MasterId == subscription.MasterId).ToListAsync(ct);
+        return ApiResponses.Subscription(subscription, _liqPay, EffectivePlanResolver.Resolve(all, DateTimeOffset.UtcNow)?.Id);
+    }
+
 }

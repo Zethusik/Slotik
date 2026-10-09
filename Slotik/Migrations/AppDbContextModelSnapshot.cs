@@ -39,6 +39,9 @@ namespace Slotik.Migrations
                     b.Property<int>("MasterId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("PendingExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("ReminderSent")
                         .HasColumnType("boolean");
 
@@ -883,6 +886,63 @@ namespace Slotik.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Slotik.Models.EntitlementGrant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("ActivatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ChainId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MasterId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("OriginalEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("OriginalStartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PaymentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Plan")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SourceSubscriptionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentId")
+                        .IsUnique();
+
+                    b.HasIndex("SourceSubscriptionId")
+                        .IsUnique();
+
+                    b.HasIndex("MasterId", "ChainId");
+
+                    b.ToTable("EntitlementGrants");
+                });
+
             modelBuilder.Entity("Slotik.Models.Favorite", b =>
                 {
                     b.Property<int>("Id")
@@ -933,6 +993,9 @@ namespace Slotik.Migrations
                     b.Property<bool>("IsBlocked")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsOnboardingCompleted")
+                        .HasColumnType("boolean");
+
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision");
 
@@ -972,6 +1035,7 @@ namespace Slotik.Migrations
                             DistrictId = 1,
                             ExperienceYears = 3,
                             IsBlocked = false,
+                            IsOnboardingCompleted = false,
                             SlotStepMin = 30,
                             Slug = "master-free-1",
                             UserId = 900001
@@ -984,6 +1048,7 @@ namespace Slotik.Migrations
                             DistrictId = 1,
                             ExperienceYears = 5,
                             IsBlocked = false,
+                            IsOnboardingCompleted = false,
                             SlotStepMin = 30,
                             Slug = "master-free-2",
                             UserId = 900002
@@ -1040,6 +1105,12 @@ namespace Slotik.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("EntitlementReviewRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastReconciledAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("OrderId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1052,6 +1123,9 @@ namespace Slotik.Migrations
 
                     b.Property<string>("ProviderStatus")
                         .HasColumnType("text");
+
+                    b.Property<int>("ReconciliationAttempts")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -1359,9 +1433,6 @@ namespace Slotik.Migrations
                     b.Property<int>("CategoryId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("CategoryId1")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1369,8 +1440,6 @@ namespace Slotik.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
-
-                    b.HasIndex("CategoryId1");
 
                     b.ToTable("ServiceGroups");
 
@@ -1643,6 +1712,30 @@ namespace Slotik.Migrations
                     b.Navigation("City");
                 });
 
+            modelBuilder.Entity("Slotik.Models.EntitlementGrant", b =>
+                {
+                    b.HasOne("Slotik.Models.Master", null)
+                        .WithMany()
+                        .HasForeignKey("MasterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Slotik.Models.Payment", "Payment")
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Slotik.Models.Subscription", "SourceSubscription")
+                        .WithMany()
+                        .HasForeignKey("SourceSubscriptionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Payment");
+
+                    b.Navigation("SourceSubscription");
+                });
+
             modelBuilder.Entity("Slotik.Models.Favorite", b =>
                 {
                     b.HasOne("Slotik.Models.Master", "Master")
@@ -1776,14 +1869,10 @@ namespace Slotik.Migrations
             modelBuilder.Entity("Slotik.Models.ServiceGroup", b =>
                 {
                     b.HasOne("Slotik.Models.Category", "Category")
-                        .WithMany()
+                        .WithMany("ServiceGroups")
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("Slotik.Models.Category", null)
-                        .WithMany("ServiceGroups")
-                        .HasForeignKey("CategoryId1");
 
                     b.Navigation("Category");
                 });

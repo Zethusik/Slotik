@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,16 +27,21 @@ namespace Slotik.Controllers
         private readonly TokenService _tservice;
         private readonly EmailService _eservice; // Email service with email token generating, hashing and sending logic
         private readonly IConfiguration _configuration;
+        private readonly PasswordService _passwords;
+        private readonly IUserWriteLock _userLock;
 
-        public AuthController(AppDbContext context,TokenService tservice, EmailService eservice, IConfiguration configuration)
+        public AuthController(AppDbContext context,TokenService tservice, EmailService eservice, IConfiguration configuration, PasswordService passwords, IUserWriteLock userLock)
         {
             _context = context;
             _tservice = tservice;
             _eservice = eservice;
             _configuration = configuration;
+            _passwords = passwords;
+            _userLock = userLock;
         }
 
         [HttpPost("login")]
+    [EnableRateLimiting("login")]
         public async Task<ActionResult> Login([FromBody] LoginDTO dto) 
         {
             var email = dto.Email;
@@ -45,9 +53,15 @@ namespace Slotik.Controllers
 
             
 
-            if (user.PasswordHash == _tservice.HashSHA256(password))
+            var verification = _passwords.Verify(user.PasswordHash, password);
+            if (verification != PasswordVerificationResult.Failed && user.Master?.IsBlocked != true)
             {
-                var token = _tservice.GenerateToken(email, user.Role.ToString(),user.Id);
+                if (verification == PasswordVerificationResult.SuccessRehashNeeded)
+                {
+                    user.PasswordHash = _passwords.Hash(password);
+                    await _context.SaveChangesAsync();
+                }
+                var token = _tservice.GenerateToken(user.Email, user.Role.ToString(),user.Id);
 
                 return Ok(new { Token = token, Role = user.Role.ToString()});
             }
@@ -59,8 +73,10 @@ namespace Slotik.Controllers
         }
 
         [HttpPost("register")]
+    [EnableRateLimiting("recovery")]
         public async Task<ActionResult> Register([FromBody] RegisterDTO dto)
         {
+            if (!_eservice.IsConfigured) return StatusCode(503, new { message = "Email delivery is not configured." });
             User user = new User();
 
             var exists = await _context.Users.AnyAsync(u => u.Phone == dto.Phone);
@@ -70,7 +86,7 @@ namespace Slotik.Controllers
 
             user.LastName = dto.LastName;
             user.FirstName = dto.FirstName;
-            user.PasswordHash = _tservice.HashSHA256(dto.Password);
+            user.PasswordHash = _passwords.Hash(dto.Password);
 
             exists = await _context.Users.AnyAsync(u => u.Email == dto.Email.Trim().ToLowerInvariant());
             if (exists) { return Conflict(new { message = "User with the same Email already exists" }); }
@@ -163,16 +179,21 @@ namespace Slotik.Controllers
         }
 
         [HttpPost("forgotPassword")]
+    [EnableRateLimiting("recovery")]
         public async Task<ActionResult> sendCode([FromBody] PasswordRestoreDTOcs dto)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            if (!_eservice.IsConfigured) return StatusCode(503, new { message = "Email delivery is not configured." });
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == dto.Email);
 
             if (user == null) { return NotFound(new { message = "No user with same mail address" }); }
+
+            await using var transaction = await _userLock.AcquireAsync(user.Id, HttpContext.RequestAborted);
+            if (!await _context.Users.AnyAsync(u => u.Id == user.Id && u.Email == user.Email)) return NotFound();
 
             var token = _eservice.GenerateEmailToken();
             PendingReset reset = new PendingReset
             {
-                email = dto.Email,
+                email = user.Email,
                 codeHash = _eservice.HashToken(token),
                 codeExpiresAt = DateTime.UtcNow.AddMinutes(30),
                 
@@ -180,6 +201,7 @@ namespace Slotik.Controllers
 
             await _context.PendingResets.AddAsync(reset);
             await _context.SaveChangesAsync();
+            await transaction.CommitAsync(HttpContext.RequestAborted);
 
             await _eservice.SendConfirmationCodeAsync(dto.Email, $"{_configuration["Frontend:BaseUrl"]}/reset-password?token={Uri.EscapeDataString(token)}");
 
@@ -188,20 +210,27 @@ namespace Slotik.Controllers
         }
 
         [HttpGet("confirmReset")]
+    [EnableRateLimiting("recovery")]
         public async Task<ActionResult> confirmResetPassword([FromQuery] string token)
         {
             if (String.IsNullOrEmpty(token)) { return BadRequest(new { message = "Bad Token." }); }
             var hashedToken = _eservice.HashToken(token);
 
-            var reset = await _context.PendingResets.FirstOrDefaultAsync(r => r.codeHash == hashedToken);
+            // Locate owner without tracking. Always re-read the request after acquiring the lock.
+            var email = await _context.PendingResets.AsNoTracking().Where(r => r.codeHash == hashedToken)
+                .Select(r => r.email).FirstOrDefaultAsync();
+            var userId = await _context.Users.Where(u => u.Email == email).Select(u => (int?)u.Id).SingleOrDefaultAsync();
+            if (userId == null) return NotFound(new { message = "Wrong token" });
+            await using var transaction = await _userLock.AcquireAsync(userId.Value, HttpContext.RequestAborted);
+            var reset = await _context.PendingResets.FirstOrDefaultAsync(r => r.codeHash == hashedToken && r.email == email);
+            if (reset == null || reset.finalTokenHash != null) return NotFound(new { message = "Wrong token" });
 
-            if (reset == null) { return NotFound(new { message = "Wrong token" }); }
-
-            if (reset.codeExpiresAt < DateTime.UtcNow)
+            if (reset.codeExpiresAt <= DateTime.UtcNow)
             {
 
                 _context.PendingResets.Remove(reset);
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync(HttpContext.RequestAborted);
 
                 return BadRequest(new { message = "Confirmation link Expired." });
             }
@@ -210,7 +239,10 @@ namespace Slotik.Controllers
 
             reset.finalTokenHash = _eservice.HashToken(FinalToken);
             reset.finalExpiresAt = DateTime.UtcNow.AddMinutes(30);
+            reset.codeHash = string.Empty;
+            reset.codeExpiresAt = DateTime.MinValue;
             await _context.SaveChangesAsync();
+            await transaction.CommitAsync(HttpContext.RequestAborted);
 
             return Ok(new { Token = FinalToken });
 
@@ -219,37 +251,49 @@ namespace Slotik.Controllers
         }
 
         [HttpPost("resetPassword")]
+    [EnableRateLimiting("recovery")]
         public async Task<ActionResult> resetPassword([FromBody] FinalResetDTO dto) 
         {
-            var reset = await _context.PendingResets.FirstOrDefaultAsync(r=>r.finalTokenHash ==_eservice.HashToken(dto.Token));
+            var hash = _eservice.HashToken(dto.Token);
+            var email = await _context.PendingResets.AsNoTracking().Where(r => r.finalTokenHash == hash)
+                .Select(r => r.email).FirstOrDefaultAsync();
+            var userId = await _context.Users.Where(u => u.Email == email).Select(u => (int?)u.Id).SingleOrDefaultAsync();
+            if (userId == null) return NotFound(new { message = "Invalid Token" });
+            await using var transaction = await _userLock.AcquireAsync(userId.Value, HttpContext.RequestAborted);
+            var reset = await _context.PendingResets.FirstOrDefaultAsync(r => r.finalTokenHash == hash && r.email == email);
             if (reset == null) { return NotFound(new { message = "Invalid Token" }); }
 
-            if (reset.finalExpiresAt < DateTime.UtcNow)
+            if (reset.finalExpiresAt == null || reset.finalExpiresAt <= DateTime.UtcNow)
             {
                 _context.PendingResets.Remove(reset);
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync(HttpContext.RequestAborted);
 
                 return BadRequest(new { message = "Token Expired." });
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u=>u.Email==reset.email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId.Value && u.Email == reset.email);
 
             if (user == null) { return BadRequest(new { message = "User somehow deleted own account." });}
 
-            user.PasswordHash = _tservice.HashSHA256(dto.NewPassword);
+            user.PasswordHash = _passwords.Hash(dto.NewPassword);
 
-            _context.PendingResets.Remove(reset);
+            // Includes both unconfirmed codes and issued final tokens for this owner.
+            _context.PendingResets.RemoveRange(await _context.PendingResets.Where(r => r.email == user.Email).ToListAsync());
 
             await _context.SaveChangesAsync();
+            await transaction.CommitAsync(HttpContext.RequestAborted);
 
             return Ok(new { message = "Password Changed." });
 
         }
 
         [HttpGet("Me")]
+        [Authorize]
 
-        public async Task<ActionResult> CheckBoard(int id) 
+        public async Task<ActionResult> CheckBoard() 
         {
+            if (User.UserId() is not int id) return Unauthorized();
             var user = await _context.Users
             .Include(u => u.Master)
                 .ThenInclude(m => m!.Services)
@@ -264,13 +308,7 @@ namespace Slotik.Controllers
 
 
 
-            var boarded =
-                user.Master != null &&
-                user.Master.Services.Any() &&
-                user.Master.Schedules.Any() &&
-                user.Master.Category != null &&
-                !string.IsNullOrWhiteSpace(user.Master.About) &&
-                user.Master.Subscriptions.Any();
+            var boarded = user.Master?.IsOnboardingCompleted == true;
 
             return Ok(new {
                 userId = id,

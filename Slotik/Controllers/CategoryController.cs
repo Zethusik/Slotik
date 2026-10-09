@@ -114,6 +114,7 @@ public class CategoryController : ControllerBase
 
 public class CategoryDto
 {
+    [System.ComponentModel.DataAnnotations.Required]
     public string Name { get; set; } = string.Empty;
     public string? Icon { get; set; }
 }

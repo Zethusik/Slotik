@@ -5,6 +5,7 @@ namespace Slotik.DTO
     public class CreateServicePhotoDTO
     {
         [Required(ErrorMessage = "Service Id is required")]
+        [Range(1, int.MaxValue)]
         public int ServiceId { get; set; }
         [Required(ErrorMessage = "Photo Url is required")]
         public string PhotoUrl { get; set; } = string.Empty;

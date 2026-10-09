@@ -1,4 +1,5 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using Slotik.Services;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -439,14 +440,9 @@ public class DaysOffController : ControllerBase
     private async Task<Master?> GetCurrentMasterAsync(
         CancellationToken cancellationToken)
     {
-        var email =
-            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
-            User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
-            User.FindFirstValue("sub") ??
-            User.FindFirstValue(ClaimTypes.Email) ??
-            User.FindFirstValue("email");
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
         {
             return null;
         }
@@ -455,7 +451,7 @@ public class DaysOffController : ControllerBase
             .AsNoTracking()
             .Include(m => m.User)
             .FirstOrDefaultAsync(
-                m => m.User.Email == email,
+                m => m.UserId == userId.Value,
                 cancellationToken);
     }
 
@@ -501,6 +497,7 @@ public class DaysOffController : ControllerBase
 
         return await _context.Bookings
             .AsNoTracking()
+            .Where(BookingRules.ReservesSlot(DateTimeOffset.UtcNow))
             .AnyAsync(
                 b =>
                     b.MasterId == masterId &&

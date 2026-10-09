@@ -11,9 +11,11 @@ public class LiqPayCallbackDto
     public string OrderId { get; set; } = string.Empty;
 
     [JsonPropertyName("payment_id")]
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public long? PaymentId { get; set; }
 
     [JsonPropertyName("amount")]
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public decimal Amount { get; set; }
 
     [JsonPropertyName("currency")]

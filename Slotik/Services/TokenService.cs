@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -51,12 +51,6 @@ namespace Slotik.Services
                 );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-
-        // hashing to SHA256 because MD5 outdated (may be changed in the future)
-        public string HashSHA256(string password)
-        {
-            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password))).ToLowerInvariant();
         }
 
     }

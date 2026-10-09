@@ -1,4 +1,5 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using Slotik.Services;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,10 +15,12 @@ namespace Slotik.Controllers;
 public class ScheduleController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IMasterSubscriptionLock _masterLock;
 
-    public ScheduleController(AppDbContext context)
+    public ScheduleController(AppDbContext context, IMasterSubscriptionLock masterLock)
     {
         _context = context;
+        _masterLock = masterLock;
     }
 
     // ========================================
@@ -128,17 +131,10 @@ public class ScheduleController : ControllerBase
         if (master == null)
             return NotFound("Master not found.");
 
-        await using var transaction =
-            await _context.Database
-                .BeginTransactionAsync(
-                    cancellationToken);
-
-        // Prevent concurrent updates of the
-        // same master's schedule.
-        await _context.Database
-            .ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock({master.Id})",
-                cancellationToken);
+        await using var transaction = await _masterLock.AcquireAsync(master.Id, cancellationToken);
+        await _context.Entry(master).ReloadAsync(cancellationToken);
+        if (await BookingMutationGuard.ScheduleConflictsAsync(_context, master, weekday, dto, cancellationToken))
+            return Conflict(BookingMutationGuard.Conflict("schedule"));
 
         var schedule =
             await _context.Schedules
@@ -194,8 +190,7 @@ public class ScheduleController : ControllerBase
             }
         }
 
-        await _context.SaveChangesAsync(
-            cancellationToken);
+        await OnboardingService.SaveAndCompleteAsync(_context, master.Id, cancellationToken);
 
         await transaction.CommitAsync(
             cancellationToken);
@@ -261,11 +256,17 @@ public class ScheduleController : ControllerBase
         if (master == null)
             return NotFound("Master not found.");
 
+        await using var transaction = await _masterLock.AcquireAsync(master.Id, cancellationToken);
+        await _context.Entry(master).ReloadAsync(cancellationToken);
+        if (master.SlotStepMin != dto.SlotStepMin
+            && await BookingMutationGuard.StepConflictsAsync(_context, master.Id, dto.SlotStepMin, cancellationToken))
+            return Conflict(BookingMutationGuard.Conflict("slot step"));
         master.SlotStepMin =
             dto.SlotStepMin;
 
         await _context.SaveChangesAsync(
             cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Ok(new
         {
@@ -282,20 +283,15 @@ public class ScheduleController : ControllerBase
         GetCurrentMasterAsync(
             CancellationToken cancellationToken)
     {
-        var email =
-            User.FindFirstValue(
-                JwtRegisteredClaimNames.Sub)
-            ??
-            User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+        var userId = User.UserId();
 
-        if (string.IsNullOrWhiteSpace(email))
+        if (!userId.HasValue)
             return null;
 
         return await _context.Masters
             .Include(m => m.User)
             .FirstOrDefaultAsync(
-                m => m.User.Email == email,
+                m => m.UserId == userId.Value,
                 cancellationToken);
     }
 

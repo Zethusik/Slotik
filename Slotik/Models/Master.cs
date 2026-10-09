@@ -22,6 +22,7 @@ public class Master
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public DateTimeOffset? ProTrialUsedAt { get; set; }
+    public bool IsOnboardingCompleted { get; set; }
 
     public ICollection<Service> Services { get; set; } = new List<Service>();
     public ICollection<Favorite> FavoritedBy { get; set; } = new List<Favorite>();

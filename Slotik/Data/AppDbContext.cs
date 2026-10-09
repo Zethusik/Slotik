@@ -30,6 +30,7 @@ public class AppDbContext : DbContext
     public DbSet<Favorite> Favorites { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<Payment> Payments { get; set; }
+    public DbSet<EntitlementGrant> EntitlementGrants { get; set; }
     public DbSet<PendingReset> PendingResets { get; set; }
 
     public DbSet<PendingRegistration> PendingRegistrations { get; set; }
@@ -41,6 +42,16 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<EntitlementGrant>().HasIndex(g => g.PaymentId).IsUnique();
+        modelBuilder.Entity<EntitlementGrant>().HasIndex(g => g.SourceSubscriptionId).IsUnique();
+        modelBuilder.Entity<EntitlementGrant>().HasIndex(g => new { g.MasterId, g.ChainId });
+        modelBuilder.Entity<EntitlementGrant>().HasOne(g => g.Payment).WithMany()
+            .HasForeignKey(g => g.PaymentId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<EntitlementGrant>().HasOne(g => g.SourceSubscription).WithMany()
+            .HasForeignKey(g => g.SourceSubscriptionId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<EntitlementGrant>().HasOne<Master>().WithMany()
+            .HasForeignKey(g => g.MasterId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<PortfolioPhoto>()
             .HasOne(p => p.Master)
@@ -115,8 +126,9 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<ServiceGroup>()
             .HasOne(g => g.Category)
-            .WithMany()
+            .WithMany(c => c.ServiceGroups)
             .HasForeignKey(g => g.CategoryId)
+            .IsRequired()
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Service>()

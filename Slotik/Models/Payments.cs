@@ -16,6 +16,9 @@ public class Payment
     public string Currency { get; set; } = "UAH";
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
     public string? ProviderStatus { get; set; }
+    public DateTimeOffset? LastReconciledAt { get; set; }
+    public int ReconciliationAttempts { get; set; }
+    public bool EntitlementReviewRequired { get; set; }
 
     public int SubscriptionId { get; set; }
     public Subscription Subscription { get; set; } = null!;

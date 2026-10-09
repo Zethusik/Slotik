@@ -42,6 +42,7 @@ public class DistrictsController : ControllerBase
     [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Create([FromBody] CreateDistrictDto dto)
     {
+        if (!await _context.Cities.AnyAsync(c => c.Id == dto.CityId)) return NotFound("City not found");
         var district = new District
         {
             Name = dto.Name,
@@ -60,6 +61,7 @@ public class DistrictsController : ControllerBase
         var district = await _context.Districts.FindAsync(id);
         if (district == null) return NotFound("Area not found");
 
+        if (!await _context.Cities.AnyAsync(c => c.Id == dto.CityId)) return NotFound("City not found");
         district.Name = dto.Name;
         district.CityId = dto.CityId;
 
@@ -73,6 +75,7 @@ public class DistrictsController : ControllerBase
     {
         var district = await _context.Districts.FindAsync(id);
         if (district == null) return NotFound("Area not found");
+        if (await _context.Masters.AnyAsync(m => m.DistrictId == id)) return Conflict("District is used by a Master");
 
         _context.Districts.Remove(district);
         await _context.SaveChangesAsync();

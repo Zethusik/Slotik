@@ -270,7 +270,7 @@ namespace Slotik.Controllers
                 user.Master.Schedules.Any() &&
                 user.Master.Category != null &&
                 !string.IsNullOrWhiteSpace(user.Master.About) &&
-                user.Master.Subscriptions.Any(s=>s.Status==SubscriptionStatus.Active && (s.Plan == SubscriptionPlan.Free || s.ExpiresAt > DateTimeOffset.UtcNow));
+                user.Master.Subscriptions.Any(s=>s.Status==SubscriptionStatus.Active);
 
             return Ok(new {
                 userId = id,

@@ -230,6 +230,8 @@ public class BookingController : ControllerBase
         [FromBody] ChangeBookingStatusDto dto,
         CancellationToken cancellationToken)
     {
+        
+
         if (!Enum.IsDefined(
                 typeof(BookingStatus),
                 dto.Status))
@@ -276,6 +278,7 @@ public class BookingController : ControllerBase
                 message = "Booking was not found."
             });
         }
+        if (booking.Status == BookingStatus.Confirmed && dto.Status == BookingStatus.Completed && booking.EndsAt > DateTimeOffset.UtcNow) { return BadRequest(new {error= "booking_not_finished", message="Can`t Complete Booking befero end time."}); }
 
         if (booking.Status == BookingStatus.Pending && (booking.PendingExpiresAt ?? booking.StartsAt) <= DateTimeOffset.UtcNow)
         {
@@ -287,6 +290,7 @@ public class BookingController : ControllerBase
         }
         if (dto.Status == BookingStatus.Confirmed)
         {
+            
             var error = await BookingRules.ValidateSlotAsync(_context, master.Id, booking.ServiceId,
                 booking.StartsAt, booking.EndsAt, booking.Id, _policy, cancellationToken);
             if (error != null) return Conflict(new { error });

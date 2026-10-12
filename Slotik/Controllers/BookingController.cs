@@ -712,7 +712,6 @@ public class BookingController : ControllerBase
             await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({masterId})", cancellationToken);
         var booking = await _context.Bookings.SingleOrDefaultAsync(b => b.Id == id, cancellationToken);
         if (booking == null) return NotFound();
-        if (booking.Status == BookingStatus.Confirmed && dto.Status == BookingStatus.Completed && booking.EndsAt > DateTimeOffset.UtcNow) { return Conflict(new { error = "booking_not_finished", message = "Can`t Complete Booking befero end time." }); }
         if (booking.MasterId != snapshot.MasterId || booking.UserId != snapshot.UserId)
             return Conflict(new { error = "booking_changed_retry" });
         var start = dto.StartsAt.ToUniversalTime(); var end = dto.EndsAt.ToUniversalTime();
@@ -746,6 +745,8 @@ public class BookingController : ControllerBase
         if (dto.Status != BookingStatus.Pending) booking.PendingExpiresAt = null;
         else if (booking.PendingExpiresAt == null || start < booking.PendingExpiresAt)
             booking.PendingExpiresAt = _policy.PendingDeadline(now, start);
+
+        if (booking.Status == BookingStatus.Confirmed && dto.Status == BookingStatus.Completed && booking.EndsAt > DateTimeOffset.UtcNow) { return Conflict(new { error = "booking_not_finished", message = "Can`t Complete Booking before end time." }); }
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return NoContent();

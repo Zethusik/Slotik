@@ -38,6 +38,10 @@ public class AppDbContext : DbContext
     public DbSet<ServiceGroup> ServiceGroups { get; set; }
 
     public DbSet<PortfolioPhoto> PortfolioPhotos => Set<PortfolioPhoto>();
+    public DbSet<TelegramLinkToken> TelegramLinkTokens { get; set; }
+    public DbSet<TelegramBinding> TelegramBindings { get; set; }
+
+    public DbSet<TelegramNotification> TelegramNotification { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

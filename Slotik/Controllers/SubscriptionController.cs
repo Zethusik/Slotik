@@ -315,6 +315,25 @@ public class SubscriptionController : ControllerBase
                     now.AddDays(ProTrialDays)
             };
 
+        var hasFreePlan = await _context.Subscriptions.AnyAsync(
+                s => s.MasterId == master.Id &&
+                s.Plan == SubscriptionPlan.Free &&
+                !s.IsTrial,
+                cancellationToken);
+
+        if (!hasFreePlan)
+        {
+            _context.Subscriptions.Add(new Subscription
+            {
+                MasterId = master.Id,
+                Plan = SubscriptionPlan.Free,
+                Status = SubscriptionStatus.Active,
+                IsTrial = false,
+                ExpiresAt = DateTimeOffset.MaxValue
+            });
+
+        }
+
         master.ProTrialUsedAt = now;
 
         _context.Subscriptions.Add(

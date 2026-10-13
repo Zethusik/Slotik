@@ -1259,6 +1259,12 @@ namespace Slotik.Migrations
                     b.Property<DateTimeOffset?>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DurationMin")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("Rating")
                         .HasColumnType("integer");
 

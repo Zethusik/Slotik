@@ -11,6 +11,7 @@ using Slotik.Models;
 using Slotik.Models.Enums;
 using Slotik.Services;
 using System.Security.Claims;
+using System.Threading;
 
 namespace Slotik.Controllers;
 
@@ -171,7 +172,7 @@ public class MasterController : ControllerBase
     [HttpPost]
     [ServiceFilter(typeof(ImageUploadFilter))]
     [EnableRateLimiting("uploads")]
-    [Authorize(Roles ="Master,Superadmin")]
+    [Authorize(Roles = "Master,Superadmin")]
     public async Task<IActionResult> Create([FromForm] CreateMasterDto dto, [FromQuery] int? id)
     {
         var userid = User.FindFirstValue("userId");
@@ -190,13 +191,13 @@ public class MasterController : ControllerBase
             UserId = id.Value;
         }
         await using var transaction = await _userLock.AcquireAsync(UserId, HttpContext.RequestAborted);
-            var user = await _context.Users.FindAsync(UserId);
+        var user = await _context.Users.FindAsync(UserId);
 
 
-            if (user == null)
-            {
-                return NotFound(new { message = $"User with Id {UserId} not found" });
-            }
+        if (user == null)
+        {
+            return NotFound(new { message = $"User with Id {UserId} not found" });
+        }
 
         if (user.Role != UserRole.Master)
         {
@@ -250,11 +251,11 @@ public class MasterController : ControllerBase
                 {
                     PhotoId = result.PublicId,
                     PhotoUrl = result.SecureUrl.AbsoluteUri,
-                    
+
                 };
 
-                
-               photos.Add(photo);
+
+                photos.Add(photo);
 
             }
         }
@@ -272,7 +273,7 @@ public class MasterController : ControllerBase
             Latitude = dto.Latitude,
             Longitude = dto.Longitude,
             PortfolioPhotos = photos
-            
+
         };
 
         _context.Masters.Add(master);
@@ -287,7 +288,7 @@ public class MasterController : ControllerBase
     [ServiceFilter(typeof(ImageUploadFilter))]
     [EnableRateLimiting("uploads")]
     [Authorize(Roles = "Master,Superadmin")]
-    public async Task<IActionResult> Update( [FromForm] CreateMasterDto dto, [FromQuery]int? id)
+    public async Task<IActionResult> Update([FromForm] CreateMasterDto dto, [FromQuery] int? id)
     {
         var userid = User.FindFirstValue("userId");
 
@@ -330,7 +331,7 @@ public class MasterController : ControllerBase
 
         if (dto.portfolioPhotos != null && dto.portfolioPhotos.Any())
         {
-            if (dto.portfolioPhotos.Count > (10-master.PortfolioPhotos.Count)) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
+            if (dto.portfolioPhotos.Count > (10 - master.PortfolioPhotos.Count)) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
 
             foreach (var file in dto.portfolioPhotos)
             {
@@ -359,15 +360,15 @@ public class MasterController : ControllerBase
 
 
 
-                
+
 
             }
 
-            
+
 
             foreach (var photo in photos) { master.PortfolioPhotos.Add(photo); }
         }
-        
+
 
 
 
@@ -403,7 +404,7 @@ public class MasterController : ControllerBase
 
     [HttpDelete("portfolio-photo/{id:int}")]
     [Authorize(Roles = "Master")]
-    public async Task<ActionResult> DeletePhoto(int id) 
+    public async Task<ActionResult> DeletePhoto(int id)
     {
         var userid = User.FindFirstValue("userId");
 
@@ -414,11 +415,11 @@ public class MasterController : ControllerBase
             .Select(m => (int?)m.Id).SingleOrDefaultAsync();
         if (masterId == null) return NotFound(new { message = "Master Not Found" });
         await using var transaction = await _masterLock.AcquireAsync(masterId.Value, HttpContext.RequestAborted);
-        var master = await _context.Masters.Include(m=>m.PortfolioPhotos).FirstOrDefaultAsync(m => m.Id == masterId.Value);
+        var master = await _context.Masters.Include(m => m.PortfolioPhotos).FirstOrDefaultAsync(m => m.Id == masterId.Value);
 
         if (master == null) return NotFound(new { message = "Master Not Found" });
 
-        var photo = master.PortfolioPhotos.FirstOrDefault(p=>p.Id == id);
+        var photo = master.PortfolioPhotos.FirstOrDefault(p => p.Id == id);
 
         if (photo == null) return NotFound(new { message = "Photo not found." });
 
@@ -430,7 +431,7 @@ public class MasterController : ControllerBase
         await PhotoUploadBatch.DeleteBestEffortAsync(_photoService, photo.PhotoId,
             HttpContext.RequestServices.GetRequiredService<ILogger<MasterController>>());
 
-        return Ok(new { message="Photo deleted."});
+        return Ok(new { message = "Photo deleted." });
 
 
     }
@@ -460,7 +461,7 @@ public class MasterController : ControllerBase
         if (await _context.EntitlementGrants.AnyAsync(g => g.MasterId == id))
             return Conflict(new { error = "managed_entitlement", message = "Use the payment/refund flow for managed billing periods." });
         if (plan == null && days == null) { return BadRequest("Empty values - days, plan"); }
-        var m = await _context.Masters.Include(m=>m.Subscriptions).FirstOrDefaultAsync(m=>m.Id==id);
+        var m = await _context.Masters.Include(m => m.Subscriptions).FirstOrDefaultAsync(m => m.Id == id);
         if (m == null) return NotFound(new { message = "Master not found" });
 
         var activeSub = EffectivePlanResolver.Resolve(m.Subscriptions, DateTimeOffset.UtcNow);
@@ -478,9 +479,9 @@ public class MasterController : ControllerBase
 
         if (activeSub == null && plan != null)
         {
-            
 
-            
+
+
 
             nSub.Plan = plan.Value;
 
@@ -496,14 +497,14 @@ public class MasterController : ControllerBase
                     nSub.ExpiresAt = DateTimeOffset.UtcNow.AddDays(30);
                 }
             }
-            
 
-            
 
-            
+
+
+
             nSub.MasterId = m.Id;
             nSub.Status = SubscriptionStatus.Active;
-            
+
 
             await _context.Subscriptions.AddAsync(nSub);
             await _context.SaveChangesAsync();
@@ -521,18 +522,18 @@ public class MasterController : ControllerBase
             {
                 nSub.ExpiresAt = activeSub.ExpiresAt.AddDays(days.Value);
             }
-            else 
+            else
             {
                 if (plan != SubscriptionPlan.Free)
                 {
                     nSub.ExpiresAt = activeSub.ExpiresAt;
                 }
-               
+
             }
 
-            
+
             nSub.MasterId = activeSub.MasterId;
-           
+
             nSub.Status = SubscriptionStatus.Active;
 
             activeSub.Status = SubscriptionStatus.Cancelled;
@@ -555,7 +556,7 @@ public class MasterController : ControllerBase
 
 
         await _context.SaveChangesAsync();
-            await billingTransaction.CommitAsync(HttpContext.RequestAborted);
+        await billingTransaction.CommitAsync(HttpContext.RequestAborted);
         return Ok(new { text = "Ok", Plan = nSub.Plan, ExpiresAt = nSub.ExpiresAt });
     }
 

@@ -8,4 +8,6 @@ public class Review
 
     public int BookingId { get; set; }
     public Booking Booking { get; set; } = null!;
+    public string? Reply { get; set; } 
+    public DateTimeOffset? UpdatedAt { get; set; }
 }

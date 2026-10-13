@@ -739,6 +739,21 @@ public class BookingController : ControllerBase
                     b.UserId == dto.UserId && b.Status == BookingStatus.Pending, cancellationToken) >= _policy.MaxPendingPerUser)
                 return Conflict(new { error = "pending_booking_limit" });
         }
+        if (
+    booking.Status == BookingStatus.Confirmed &&
+    dto.Status == BookingStatus.Completed &&
+    (
+        booking.EndsAt > now ||
+        end > now
+    )
+)
+        {
+            return Conflict(new
+            {
+                error = "booking_not_finished",
+                message = "Can't complete booking before end time."
+            });
+        }
         booking.StartsAt = start; booking.EndsAt = end; booking.Status = dto.Status;
         booking.Comment = dto.Comment; booking.ReminderSent = dto.ReminderSent;
         booking.ServiceId = dto.ServiceId; booking.MasterId = dto.MasterId; booking.UserId = dto.UserId;
@@ -746,7 +761,7 @@ public class BookingController : ControllerBase
         else if (booking.PendingExpiresAt == null || start < booking.PendingExpiresAt)
             booking.PendingExpiresAt = _policy.PendingDeadline(now, start);
 
-        if (booking.Status == BookingStatus.Confirmed && dto.Status == BookingStatus.Completed && booking.EndsAt > DateTimeOffset.UtcNow) { return Conflict(new { error = "booking_not_finished", message = "Can`t Complete Booking before end time." }); }
+        
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return NoContent();

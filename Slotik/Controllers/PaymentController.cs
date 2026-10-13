@@ -360,7 +360,28 @@ public class PaymentController : ControllerBase
             var activated = await PaidPlanActivation.ApplyAsync(_context, payment, now, cancellationToken);
             if (!activated)
                 _logger.LogWarning("Successful payment {PaymentId} requires entitlement review; no additional access was granted.", payment.Id);
+
+            var hasFreePlan = await _context.Subscriptions.AnyAsync(
+                s => s.MasterId == subscription.MasterId &&
+                s.Plan == SubscriptionPlan.Free &&
+                !s.IsTrial,
+                cancellationToken);
+
+            if (!hasFreePlan)
+            {
+                _context.Subscriptions.Add(new Subscription
+                {
+                    MasterId = subscription.MasterId,
+                    Plan = SubscriptionPlan.Free,
+                    Status = SubscriptionStatus.Active,
+                    IsTrial = false,
+                    ExpiresAt = DateTimeOffset.MaxValue
+                });
+                
+            }
             await OnboardingService.SaveAndCompleteAsync(_context, subscription.MasterId, cancellationToken);
+
+            await _context.SaveChangesAsync(cancellationToken);
 
             await transaction.CommitAsync(
                 cancellationToken);

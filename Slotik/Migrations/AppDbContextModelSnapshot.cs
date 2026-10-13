@@ -1256,6 +1256,9 @@ namespace Slotik.Migrations
                     b.Property<int>("BookingId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Rating")
                         .HasColumnType("integer");
 
@@ -1269,10 +1272,15 @@ namespace Slotik.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BookingId")
                         .IsUnique();
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Reviews");
 
@@ -1829,7 +1837,13 @@ namespace Slotik.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Slotik.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
                     b.Navigation("Booking");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Slotik.Models.Schedule", b =>

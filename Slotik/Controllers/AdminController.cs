@@ -280,8 +280,8 @@ public class AdminController : ControllerBase
 
             IsBlocked = m.IsBlocked,
 
-            AvatarUrl = null,
-            // TODO: avatar upload logic
+            AvatarUrl = string.IsNullOrWhiteSpace(m.User.AvatarUrl) ? null : m.User.AvatarUrl,
+            
 
             DistrictName =
                 m.District?.Name
@@ -298,8 +298,8 @@ public class AdminController : ControllerBase
             TariffPrice = 0,
             // TODO: connect tariff pricing
 
-            nextPaymentAt = null,
-            // TODO: payment logic
+            nextPaymentAt = activeSubscription != null ? activeSubscription.ExpiresAt : null,
+            
 
             BookingsCount = m.Bookings
                 .Select(b => b.UserId)

@@ -78,7 +78,7 @@ public class FullMasterDto
     public string? Currency { get; set; } = "UAH";
     public string? BillingPeriod { get; set; } = "month";
 
-    public string? nextPaymentAt { get; set; }
+    public DateTimeOffset? nextPaymentAt { get; set; }
     public int BookingsCount { get; set; }
     public List<Payment> Payments { get; set; } = new List<Payment>();
 }

@@ -169,6 +169,133 @@ public class MasterController : ControllerBase
         });
     }
 
+    [HttpPost("portfolio-photos/add")]
+    [Consumes("multipart/form-data")]
+    [Authorize(Roles = "Master")]
+    public async Task<ActionResult> AddPortfolioPhotos([FromForm]IEnumerable<IFormFile> files, CancellationToken cancellationToken)
+    {
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        var masterId = await _context.Masters.Where(m=>m.UserId==UserId).Select(m => (int?)m.Id).FirstOrDefaultAsync(cancellationToken);
+
+        if (masterId == null) { return NotFound(new { message = "Master profile not found."}); }
+
+        if (files == null || !files.Any()) { return BadRequest(new { message = "No photos sent." }); }
+
+        var fileList = files?.ToList() ?? [];
+
+        const long maxFileSize = 5 * 1024 * 1024; // 5 MB
+
+        var allowedContentTypes = new[]
+        {
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+        };
+
+        foreach (var file in fileList)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Corrupted file uploaded."
+                });
+            }
+
+            if (file.Length > maxFileSize)
+            {
+                return BadRequest(new
+                {
+                    message = $"File '{file.FileName}' exceeds the 5 MB limit."
+                });
+            }
+
+            if (!allowedContentTypes.Contains(file.ContentType.ToLowerInvariant()))
+            {
+                return BadRequest(new
+                {
+                    message = $"File '{file.FileName}' has unsupported format. Only JPG, PNG and WebP are allowed."
+                });
+            }
+        }
+
+        await using var transaction =
+        await _masterLock.AcquireAsync(
+            masterId.Value,
+            cancellationToken);
+
+
+        var master = await _context.Masters
+        .Include(m => m.PortfolioPhotos)
+        .FirstOrDefaultAsync(
+            m => m.Id == masterId.Value,
+            cancellationToken);
+
+        if (master == null) { return NotFound(new { message = "Master profile not found." }); }
+
+        if ((master.PortfolioPhotos.Count + fileList.Count) > 10) { return BadRequest(new { message="10 photos limit hit."}); }
+
+       
+
+        
+
+            await using var batch = new PhotoUploadBatch(
+        _photoService,
+        HttpContext.RequestServices
+            .GetRequiredService<ILogger<MasterController>>());
+
+      
+
+        List<PortfolioPhoto> newphotos = new List<PortfolioPhoto>();
+
+        foreach (var file in fileList)
+        {
+            var result = await batch.AddAsync(file);
+
+            if (PhotoUploadBatch.Failed(result))
+            {
+                return BadRequest(new
+                {
+                    error = "image_upload_failed"
+                });
+            }
+
+            newphotos.Add(new PortfolioPhoto
+            {
+                PhotoId = result.PublicId,
+                PhotoUrl = result.SecureUrl.AbsoluteUri
+            });
+        }
+
+        foreach (var photo in newphotos)
+        {
+            master.PortfolioPhotos.Add(photo);
+        }
+
+
+
+        
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Photos added successfully",
+
+            photos = master.PortfolioPhotos.Select(p => new
+            {
+                p.Id,
+                p.PhotoId,
+                p.PhotoUrl
+            }).ToList()
+        });
+    }
+
     [HttpPost]
     [ServiceFilter(typeof(ImageUploadFilter))]
     [EnableRateLimiting("uploads")]

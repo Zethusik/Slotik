@@ -21,6 +21,10 @@ namespace Slotik.DTO
 
         public int SortOrder { get; set; }
 
+        
+        public string? Description { get; set; }
+        public string? Included {  get; set; }
+
         public List<IFormFile> files { get; set; } = new List<IFormFile>();
     }
 }

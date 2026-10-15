@@ -118,6 +118,8 @@ namespace Slotik.Controllers
 
             if (dto.files == null || !dto.files.Any() || dto.files.Count > 3) { return BadRequest(new { message = "No Photos or more than 3" }); }
 
+            if (string.IsNullOrWhiteSpace(dto.Description) || string.IsNullOrWhiteSpace(dto.Included)) { return BadRequest(new{message = "Descroption or Included is null or white space."}); } // if descroption and included are nullable on frontend delete this if
+
             
 
             Service sub = new Service
@@ -129,6 +131,8 @@ namespace Slotik.Controllers
                 GroupId = dto.GroupId,
                 IsPopular  = dto.IsPopular,
                 SortOrder = maxSortOrder+1,
+                Description = dto.Description,
+                Included = dto.Included,
             };
 
            
@@ -207,6 +211,8 @@ namespace Slotik.Controllers
             serviceToChange.GroupId = dto.GroupId;
             serviceToChange.IsPopular = dto.IsPopular;
 
+
+            if (!string.IsNullOrWhiteSpace(dto.Description) && !string.IsNullOrWhiteSpace(dto.Included)) { serviceToChange.Description = dto.Description;serviceToChange.Included = dto.Included; } // if descroption and included are nullable on frontend delete this if
 
 
 

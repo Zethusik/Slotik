@@ -172,6 +172,7 @@ public class MasterController : ControllerBase
     [HttpPost("portfolio-photos/add")]
     [Consumes("multipart/form-data")]
     [Authorize(Roles = "Master")]
+    [ServiceFilter(typeof(ImageUploadFilter))]
     public async Task<ActionResult> AddPortfolioPhotos([FromForm]IEnumerable<IFormFile> files, CancellationToken cancellationToken)
     {
         var userid = User.FindFirstValue("userId");
@@ -301,6 +302,7 @@ public class MasterController : ControllerBase
     [ServiceFilter(typeof(ImageUploadFilter))]
     [EnableRateLimiting("uploads")]
     [Authorize(Roles = "Master,Superadmin")]
+    
     public async Task<IActionResult> Create([FromForm] CreateMasterDto dto, [FromQuery] int? id)
     {
         var userid = User.FindFirstValue("userId");

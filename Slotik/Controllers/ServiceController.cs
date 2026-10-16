@@ -211,10 +211,10 @@ namespace Slotik.Controllers
             serviceToChange.SortOrder = dto.SortOrder;
             serviceToChange.GroupId = dto.GroupId;
             serviceToChange.IsPopular = dto.IsPopular;
+            serviceToChange.Included = dto.Included;
+            serviceToChange.Description= dto.Description;
 
-
-            if (dto.Included != null) { serviceToChange.Included = dto.Included; }
-            if (dto.Description != null) { serviceToChange.Description = dto.Description; }
+            
 
 
 

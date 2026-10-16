@@ -282,6 +282,7 @@ public class MasterController : ControllerBase
 
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        batch.Commit();
 
         return Ok(new
         {

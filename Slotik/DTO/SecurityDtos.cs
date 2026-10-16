@@ -47,6 +47,7 @@ public class PublicMasterResponse
     public double? Longitude { get; init; }
     public List<PublicServiceResponse> Services { get; init; } = new();
     public List<PublicPhotoResponse> PortfolioPhotos { get; init; } = new();
+    public DateTimeOffset CreatedAt { get; set; }
 }
 public record PaymentResponse(int Id, string OrderId, DateTimeOffset CreatedAt,
     DateTimeOffset? PaidAt, decimal Amount, string Currency, PaymentStatus Status,

@@ -23,7 +23,9 @@ public static class ApiResponses
         Services = m.Services.Select(s => new PublicServiceResponse(s.Id, s.MasterId, s.Name,
             s.DurationMin, s.Price, s.Description, s.Included, s.GroupId, s.IsPopular, s.SortOrder,
             s.Photos.Select(p => new PublicPhotoResponse(p.Id, p.PhotoUrl, p.SortOrder)).ToList())).ToList(),
-        PortfolioPhotos = m.PortfolioPhotos.Select(p => new PublicPhotoResponse(p.Id, p.PhotoUrl, 0)).ToList()
+        PortfolioPhotos = m.PortfolioPhotos.Select(p => new PublicPhotoResponse(p.Id, p.PhotoUrl, 0)).ToList(),
+        CreatedAt = m.User.CreatedAt
+
     };
     public static PaymentResponse Payment(Payment p) => new(p.Id, p.OrderId, p.CreatedAt,
         p.PaidAt, p.Amount, p.Currency, p.Status, p.ProviderStatus, p.SubscriptionId, p.EntitlementReviewRequired);

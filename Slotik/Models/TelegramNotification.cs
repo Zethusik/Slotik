@@ -12,5 +12,7 @@
             = DateTimeOffset.UtcNow;
 
         public int Attempts { get; set; } = 0;
+
+        public User User { get; set; }
     }
 }

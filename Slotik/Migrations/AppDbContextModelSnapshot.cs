@@ -1307,6 +1307,32 @@ namespace Slotik.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Slotik.Models.ReviewPhoto", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("PhotoId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhotoUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ReviewId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewId");
+
+                    b.ToTable("ReviewPhotos");
+                });
+
             modelBuilder.Entity("Slotik.Models.Schedule", b =>
                 {
                     b.Property<int>("Id")
@@ -1852,6 +1878,17 @@ namespace Slotik.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Slotik.Models.ReviewPhoto", b =>
+                {
+                    b.HasOne("Slotik.Models.Review", "Review")
+                        .WithMany("Files")
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Review");
+                });
+
             modelBuilder.Entity("Slotik.Models.Schedule", b =>
                 {
                     b.HasOne("Slotik.Models.Master", "Master")
@@ -1957,6 +1994,11 @@ namespace Slotik.Migrations
                     b.Navigation("Services");
 
                     b.Navigation("Subscriptions");
+                });
+
+            modelBuilder.Entity("Slotik.Models.Review", b =>
+                {
+                    b.Navigation("Files");
                 });
 
             modelBuilder.Entity("Slotik.Models.Schedule", b =>

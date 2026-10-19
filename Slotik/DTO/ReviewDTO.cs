@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Slotik.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace Slotik.DTO
 {
@@ -17,6 +18,7 @@ namespace Slotik.DTO
         public DateTimeOffset endsAt { get;set; }
         public string? reply { get; set; } 
         public DateTimeOffset? UpdatedAt { get; set; }
+        public List<ReviewPhoto>? Files { get; set; } 
 
 
     }
@@ -27,5 +29,7 @@ namespace Slotik.DTO
         public string Text { get; set; }
         [Required]
         public int Rating { get; set; }
+
+        public List<IFormFile>? Files { get; set; }
     }
 }

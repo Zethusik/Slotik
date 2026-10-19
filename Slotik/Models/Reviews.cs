@@ -15,4 +15,5 @@ public class Review
     public string? Reply { get; set; } 
     public DateTimeOffset? UpdatedAt { get; set; }  // TODO after getting rid of seed reviews remove nullable (?)
     public DateTimeOffset? CreatedAt { get;set; }  // TODO after getting rid of seed reviews remove nullable (?)
+    public List<ReviewPhoto> Files { get; set; } = [];
 }

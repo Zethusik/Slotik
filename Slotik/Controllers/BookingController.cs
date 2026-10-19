@@ -57,16 +57,16 @@ public class BookingController : ControllerBase
                 b.StartsAt,
                 b.EndsAt,
                 b.Status,
-                b.Comment,
                 b.ReminderSent,
                 b.PendingExpiresAt,
-
+                b.Comment,
                 b.ServiceId,
                 serviceName = b.Service.Name,
                 durationMin = b.Service.DurationMin,
                 price = b.Service.Price,
 
-                b.MasterId
+                b.MasterId,
+                b.Review,
             })
             .ToListAsync(cancellationToken);
 

@@ -1,12 +1,14 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Storage.Internal.Mapping;
 using Slotik.Data;
 using Slotik.DTO;
 using Slotik.Models;
 using Slotik.Models.Enums;
+using Slotik.Services;
 using System.Security.Claims;
 using System.Threading;
 
@@ -20,10 +22,12 @@ namespace Slotik.Controllers
     {
 
         private readonly AppDbContext _context;
+        private readonly IPhotoService _photoService;
 
-        public ReviewController(AppDbContext context)
+        public ReviewController(AppDbContext context, IPhotoService photoService)
         {
             _context = context;
+            _photoService = photoService;
         }
 
         [HttpGet("master/me")]
@@ -202,9 +206,11 @@ namespace Slotik.Controllers
         }
 
         [HttpPut("booking/{Id:int}")]
+        [ServiceFilter(typeof(ImageUploadFilter))]
+        [Consumes("multipart/form-data")]
         [Authorize(Roles = "Client")]
 
-        public async Task<ActionResult> CreateReview(int Id, [FromBody]CreateReviewDTO dto) 
+        public async Task<ActionResult> CreateReview(int Id, [FromForm]CreateReviewDTO dto) 
         {
             if (dto.Rating < 1 || dto.Rating > 5)
             {
@@ -221,7 +227,7 @@ namespace Slotik.Controllers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == UserId);
 
             if (user == null) { return NotFound(new { message="User Profile Not Found."}); }
-            var booking = await _context.Bookings.Include(b=>b.Service).Include(b=>b.Review).Where(b => b.Id == Id && b.UserId == UserId).FirstOrDefaultAsync();
+            var booking = await _context.Bookings.Include(b=>b.Service).Include(b=>b.Review).ThenInclude(r=>r.Files).Where(b => b.Id == Id && b.UserId == UserId).FirstOrDefaultAsync();
 
             if (booking == null) { return NotFound(new { message = "Booking not found."}); }
 
@@ -234,6 +240,12 @@ namespace Slotik.Controllers
                     message = "Review can be added only after completed booking."
                 });
             }
+
+            await using var batch = new PhotoUploadBatch(
+        _photoService,
+        HttpContext.RequestServices
+            .GetRequiredService<ILogger<ReviewController>>());
+
 
             if (booking.Review == null)
             {
@@ -249,16 +261,70 @@ namespace Slotik.Controllers
 
                 };
 
+                if (dto.Files != null && dto.Files.Any() && dto.Files.Count <=3)
+                {
+                    foreach (var file in dto.Files)
+                    { 
+                        var result =await batch.AddAsync(file);
+
+                        if (PhotoUploadBatch.Failed(result))
+                        {
+                            return BadRequest(new
+                            {
+                                error = "image_upload_failed"
+                            });
+                        }
+
+                        var photo = new ReviewPhoto 
+                        {
+                            PhotoId = result.PublicId,
+                            PhotoUrl=result.SecureUrl.AbsoluteUri,
+                            Review= review,
+                        };
+
+                        await _context.ReviewPhotos.AddAsync(photo);
+                    }
+                }
+
                 await _context.Reviews.AddAsync(review);
                 await _context.SaveChangesAsync();
+                batch.Commit();
 
             }
             else
-            { 
+            {
+                if (dto.Files != null && dto.Files.Any() && (booking.Review.Files.Count + dto.Files.Count) <=3)
+                {
+                    foreach (var file in dto.Files)
+                    {
+                        var result = await batch.AddAsync(file);
+
+                        if (PhotoUploadBatch.Failed(result))
+                        {
+                            return BadRequest(new
+                            {
+                                error = "image_upload_failed"
+                            });
+                        }
+
+                        var photo = new ReviewPhoto
+                        {
+                            PhotoId = result.PublicId,
+                            PhotoUrl = result.SecureUrl.AbsoluteUri,
+                            Review = booking.Review,
+                        };
+
+                        await _context.ReviewPhotos.AddAsync(photo);
+                    }
+                }
+
+
+
                 booking.Review.Rating = dto.Rating;
                 booking.Review.Text = dto.Text.Trim();
                 booking.Review.UpdatedAt = DateTimeOffset.UtcNow;
                 await _context.SaveChangesAsync();
+                batch.Commit();
             }
 
             

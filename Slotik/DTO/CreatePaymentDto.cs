@@ -5,4 +5,6 @@ namespace Slotik.DTO;
 public class CreatePaymentDto
 {
     public SubscriptionPlan Plan { get; set; }
+
+    public bool IsPlanChange { get; set; } = false;
 }

@@ -109,7 +109,11 @@ public class PaymentController : ControllerBase
             Currency = "UAH", Status = PaymentStatus.Pending, CreatedAt = DateTimeOffset.UtcNow };
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync(cancellationToken);
-        var resultUrl = $"{_settings.ResultUrl.TrimEnd('/')}/payment/result?paymentId={payment.Id}";
+
+        var resultUrl = dto.IsPlanChange
+            ? $"{_settings.ResultUrl.TrimEnd('/')}/payment/result?paymentId={payment.Id}&mode=change"
+            : $"{_settings.ResultUrl.TrimEnd('/')}/payment/result?paymentId={payment.Id}";
+
         LiqPayCheckoutResponse checkout;
         try { checkout = _liqPay.CreateCheckout(orderId, dto.Plan, amount, resultUrl); }
         catch (InvalidOperationException)

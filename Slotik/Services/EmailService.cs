@@ -62,7 +62,7 @@ namespace Slotik.Services
 
             using var client = new SmtpClient();
 
-            client.CheckCertificateRevocation = false;
+            
 
             await client.ConnectAsync(
                 _settings.Host,
@@ -111,7 +111,7 @@ namespace Slotik.Services
 
             using var client = new SmtpClient();
 
-            client.CheckCertificateRevocation = false;
+            
 
             await client.ConnectAsync(
                 _settings.Host,

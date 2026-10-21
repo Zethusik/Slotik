@@ -6,6 +6,7 @@ using Slotik.Data;
 using Slotik.Services;
 using System.Text;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.HttpOverrides;
 
 namespace Slotik;
 
@@ -110,12 +111,12 @@ public class Program
         builder.Services.AddScoped<ImageUploadFilter>();
         builder.Services.AddOptions<Microsoft.AspNetCore.Http.Features.FormOptions>()
             .Configure<Microsoft.Extensions.Options.IOptions<UploadSettings>>((form, upload) =>
-                form.MultipartBodyLengthLimit = upload.Value.MaxFileBytes);
+                form.MultipartBodyLengthLimit = upload.Value.MaxRequestBytes);
 
         builder.Services.Configure<SmtpSettings>(
             builder.Configuration.GetSection("SmtpSettings"));
 
-        builder.Services.AddScoped<SmtpSettings>();
+        //builder.Services.AddScoped<SmtpSettings>();
         builder.Services.AddScoped<EmailService>();
 
         builder.Services.Configure<CloudinarySettings>(
@@ -169,6 +170,13 @@ public class Program
 
         var app = builder.Build();
 
+        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        {
+            ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto
+        });
+
         // Database
         using (var scope = app.Services.CreateScope())
         {
@@ -182,8 +190,12 @@ public class Program
                 await DbInitializer.SeedDataAsync(context, app.Environment);
         }
 
-        app.UseSwagger();
-        app.UseSwaggerUI();
+
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI();
+        }
 
         /*
          * Для локального ngrok пока выключено

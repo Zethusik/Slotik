@@ -166,6 +166,24 @@ public class BookingController : ControllerBase
 
         booking.Status = BookingStatus.Cancelled;
 
+        var Bind = await _context.TelegramBindings.FirstOrDefaultAsync(b => b.Id == user.Id);
+
+        if (Bind != null)
+        {
+            TelegramNotification notif = new TelegramNotification 
+            {
+                Message="Ваш букінг на "+ booking.StartsAt.ToString() + " було успішно скасовано.",
+                SendAt=DateTimeOffset.UtcNow,
+                Attempts=0,
+                UserId =user.Id,
+                
+            };
+
+            _context.TelegramNotification.Add(notif);
+        }
+
+
+
         await _context.SaveChangesAsync(
             cancellationToken);
 
@@ -344,6 +362,26 @@ public class BookingController : ControllerBase
 
         booking.Status = dto.Status;
         if (dto.Status != BookingStatus.Pending) booking.PendingExpiresAt = null;
+
+        var Bind = await _context.TelegramBindings.FirstOrDefaultAsync(b => b.UserId == booking.User.Id);
+        if (Bind != null)
+        {
+            TelegramNotification notif = new TelegramNotification 
+            {
+                SendAt = DateTime.UtcNow,
+                UserId = booking.User.Id,
+                Attempts = 0,
+            };
+            if (dto.Status == BookingStatus.Completed)
+            {
+                notif.Message = $"Запис на {booking.StartsAt:dd.MM.yyyy HH:mm} завершено майстром.";
+            }
+
+            if (dto.Status == BookingStatus.Cancelled)
+            {
+                notif.Message = $"Запис на {booking.StartsAt:dd.MM.yyyy HH:mm} скасовано майстром.";
+            }
+        }
 
         await _context.SaveChangesAsync(
             cancellationToken);
@@ -685,7 +723,7 @@ public class BookingController : ControllerBase
             .CountAsync(b => b.UserId == userId && b.Status == BookingStatus.Pending, cancellationToken);
         if (pendingCount >= _policy.MaxPendingPerUser)
             return Conflict(new { error = "pending_booking_limit", limit = _policy.MaxPendingPerUser });
-        var service = await _context.Services.AsNoTracking().SingleOrDefaultAsync(s => s.Id == dto.ServiceId, cancellationToken);
+        var service = await _context.Services.Include(s=>s.Master).AsNoTracking().SingleOrDefaultAsync(s => s.Id == dto.ServiceId, cancellationToken);
         if (service == null || service.MasterId != masterId.Value) return Conflict(new { error = "service_changed" });
         var startsAt = dto.StartsAt.ToUniversalTime();
         if (service.DurationMin <= 0 || service.DurationMin > (DateTimeOffset.MaxValue - startsAt).TotalMinutes)
@@ -701,6 +739,70 @@ public class BookingController : ControllerBase
             Comment = string.IsNullOrWhiteSpace(dto.Comment) ? null : dto.Comment.Trim(),
             UserId = userId, MasterId = masterId.Value, ServiceId = service.Id
         };
+
+        var Bind = await _context.TelegramBindings.FirstOrDefaultAsync(b => b.UserId == userId);
+
+        if (Bind != null)
+        {
+            TelegramNotification notif = new TelegramNotification 
+            {
+                UserId=userId,
+                Attempts=0,
+                Message = $"Запис на {booking.StartsAt:dd.MM.yyyy HH:mm} успішно створено.",
+                SendAt = DateTimeOffset.UtcNow
+            };
+
+
+            if (booking.StartsAt.AddMinutes(-30) > DateTimeOffset.UtcNow)
+            {
+                TelegramNotification notif2 = new TelegramNotification
+                {
+                    UserId = userId,
+                    Attempts = 0,
+                    Message = "У вас запис через 30 хвилин на " + service.Name,
+                    SendAt = booking.StartsAt.AddMinutes(-30)
+                };
+
+                _context.TelegramNotification.Add(notif2);
+            }
+
+            _context.TelegramNotification.Add(notif);
+            
+        }
+
+        var MBind = await _context.TelegramBindings.FirstOrDefaultAsync(b => b.UserId == service.Master.UserId);
+
+        if (MBind != null)
+        {
+            TelegramNotification notifM = new TelegramNotification 
+            {
+            
+                UserId = service.Master.UserId,
+                Attempts = 0,
+                SendAt= DateTimeOffset.UtcNow,
+                Message = $"До вас записались на {booking.StartsAt:dd.MM.yyyy HH:mm}",
+
+            };
+
+            _context.TelegramNotification.Add(notifM);
+
+            if (booking.StartsAt.AddMinutes(-30) > DateTimeOffset.UtcNow)
+            {
+                TelegramNotification notifM2 = new TelegramNotification
+                {
+                    UserId = service.Master.UserId,
+                    Attempts = 0,
+                    Message = "У вас прийом клієнта через 30 хвилин на " + service.Name,
+                    SendAt = booking.StartsAt.AddMinutes(-30)
+                };
+
+                _context.TelegramNotification.Add(notifM2);
+            }
+
+
+        }
+
+
         _context.Bookings.Add(booking);
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

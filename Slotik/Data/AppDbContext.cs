@@ -49,6 +49,14 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<TelegramBinding>()
+            .HasIndex(x => x.UserId)
+            .IsUnique();
+
+        modelBuilder.Entity<TelegramBinding>()
+            .HasIndex(x => x.TelegramUserId)
+            .IsUnique();
+
         modelBuilder.Entity<EntitlementGrant>().HasIndex(g => g.PaymentId).IsUnique();
         modelBuilder.Entity<EntitlementGrant>().HasIndex(g => g.SourceSubscriptionId).IsUnique();
         modelBuilder.Entity<EntitlementGrant>().HasIndex(g => new { g.MasterId, g.ChainId });

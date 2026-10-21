@@ -1614,7 +1614,11 @@ namespace Slotik.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("TelegramUserId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
 
                     b.ToTable("TelegramBindings");
                 });
@@ -1669,6 +1673,8 @@ namespace Slotik.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("TelegramNotification");
                 });
@@ -2058,6 +2064,17 @@ namespace Slotik.Migrations
                 });
 
             modelBuilder.Entity("Slotik.Models.TelegramLinkToken", b =>
+                {
+                    b.HasOne("Slotik.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Slotik.Models.TelegramNotification", b =>
                 {
                     b.HasOne("Slotik.Models.User", "User")
                         .WithMany()

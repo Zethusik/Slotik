@@ -1,237 +1,161 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Storage.Internal.Mapping;
 using Slotik.Data;
 using Slotik.DTO;
 using Slotik.Models;
 using Slotik.Models.Enums;
 using Slotik.Services;
-using System.Security.Claims;
-using System.Threading;
 
 namespace Slotik.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-
-
     public class ReviewController : ControllerBase
     {
+        private const int MaximumPhotosPerReview = 3;
 
         private readonly AppDbContext _context;
         private readonly IPhotoService _photoService;
+        private readonly IUserWriteLock _userWriteLock;
 
-        public ReviewController(AppDbContext context, IPhotoService photoService)
+        public ReviewController(
+            AppDbContext context,
+            IPhotoService photoService,
+            IUserWriteLock userWriteLock)
         {
             _context = context;
             _photoService = photoService;
+            _userWriteLock = userWriteLock;
         }
 
         [HttpGet("master/me")]
         [Authorize(Roles = "Master")]
-
-        public async Task<ActionResult> getReviews(CancellationToken cancellationToken)
+        public async Task<ActionResult> GetReviews(CancellationToken cancellationToken)
         {
-            var userid = User.FindFirstValue("userId");
-
-            if (!int.TryParse(userid, out var UserId))
+            if (User.UserId() is not int userId)
+            {
                 return Unauthorized();
+            }
 
             var masterId = await _context.Masters
-                .Where(m => m.UserId == UserId)
-                .Select(m => (int?)m.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+                .Where(master => master.UserId == userId)
+                .Select(master => (int?)master.Id)
+                .SingleOrDefaultAsync(cancellationToken);
 
-            if (masterId == null) { return NotFound(new { message = "Master profile is missing" }); }
-
-            var reviews = await _context.Reviews
-               .AsNoTracking()
-               .Include(r=>r.User)
-               .Include(r=>r.Booking)
-                .ThenInclude(r=>r.Service)
-               .Where(r => r.Booking.MasterId == masterId.Value)
-               .ToListAsync(cancellationToken);
-
-            List<ReviewDTO> FormRevs = new List<ReviewDTO>();
-
-            if (reviews.Count == 0)
+            if (masterId == null)
             {
-                return Ok(new
-                {
-                    averageRating = 0,
-                    totalCount = 0,
-                    Reviews = Array.Empty<ReviewDTO>(),
-                });
+                return NotFound(new { message = "Master profile is missing" });
             }
 
-
-
-            foreach (var review in reviews)
-            {
-                FormRevs.Add(new ReviewDTO {
-                    id = review.Id,
-                    rating = review.Rating,
-                    text = review.Text,
-                    createdAt = review.CreatedAt,
-                    clientFirstName = review.User?.FirstName,
-                    clientAvatarUrl = review.User?.AvatarUrl,
-                    serviceName = review.Booking.Service.Name,
-                    durationMin = review.DurationMin,
-                    price = review.Price,
-                    startsAt = review.Booking.StartsAt,
-                    endsAt = review.Booking.EndsAt,
-                    reply = review.Reply,
-                    UpdatedAt = review.UpdatedAt,
-                
-                });
-            }
-
-            FormRevs = FormRevs.OrderByDescending(r => r.createdAt.HasValue).ThenByDescending(r=>r.createdAt).ToList();
-
-            return Ok(new
-            {
-                averageRating = FormRevs.Average(r => r.rating),
-                totalCount = FormRevs.Count,
-                Reviews = FormRevs
-            });
-
+            return await GetMasterReviewsAsync(masterId.Value, cancellationToken);
         }
 
         [HttpPut("{Id:int}/reply")]
         [Authorize(Roles = "Master")]
-
-        public async Task<ActionResult> Reply(int Id,[FromBody]string text) 
+        public async Task<ActionResult> Reply(int Id, [FromBody] string text)
         {
-            var now = DateTimeOffset.UtcNow;
-            if (string.IsNullOrWhiteSpace(text)) { return BadRequest(new { message="Text is essential for reply."}); }
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return BadRequest(new { message = "Text is essential for reply." });
+            }
 
-            var userid = User.FindFirstValue("userId");
-
-            if (!int.TryParse(userid, out var UserId))
+            if (User.UserId() is not int userId)
+            {
                 return Unauthorized();
+            }
 
             var masterId = await _context.Masters
-                .Where(m => m.UserId == UserId)
-                .Select(m => (int?)m.Id)
-                .FirstOrDefaultAsync();
+                .Where(master => master.UserId == userId)
+                .Select(master => (int?)master.Id)
+                .SingleOrDefaultAsync();
 
-            if (masterId == null) { return NotFound(new { message = "Master profile is missing" }); }
+            if (masterId == null)
+            {
+                return NotFound(new { message = "Master profile is missing" });
+            }
 
-            var review = await _context.Reviews.Include(r=>r.Booking).Where(r => r.Booking.MasterId == masterId && r.Id == Id).FirstOrDefaultAsync();
-            if (review == null) { return NotFound(new { message = "Review Not Found."}); }
+            var review = await _context.Reviews
+                .Where(review => review.Booking.MasterId == masterId && review.Id == Id)
+                .SingleOrDefaultAsync();
 
+            if (review == null)
+            {
+                return NotFound(new { message = "Review Not Found." });
+            }
+
+            var now = DateTimeOffset.UtcNow;
             review.Reply = text.Trim();
             review.UpdatedAt = now;
 
             await _context.SaveChangesAsync();
 
-            return Ok(new {
-            reviewId = Id,
-            reply = text.Trim(),
-            reviewUpdatedAt = now
+            return Ok(new
+            {
+                reviewId = Id,
+                reply = review.Reply,
+                reviewUpdatedAt = now
             });
-
-            
-
         }
 
         [HttpGet("master/{Id:int}")]
-
-        public async Task<ActionResult> MasterReviews(int Id, CancellationToken cancellationToken) 
+        public async Task<ActionResult> MasterReviews(int Id, CancellationToken cancellationToken)
         {
+            var masterExists = await _context.Masters
+                .AnyAsync(master => master.Id == Id, cancellationToken);
 
-            var master = await _context.Masters
-                .Where(m => m.Id == Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (master == null) { return NotFound(new { message="Master Not Found."}); }
-
-            var reviews = await _context.Reviews
-              .AsNoTracking()
-              .Include(r => r.User)
-              .Include(r => r.Booking)
-               .ThenInclude(r => r.Service)
-              .Where(r => r.Booking.MasterId == master.Id)
-              .ToListAsync(cancellationToken);
-
-            List<ReviewDTO> FormRevs = new List<ReviewDTO>();
-
-            if (reviews.Count == 0)
+            if (!masterExists)
             {
-                return Ok(new
-                {
-                   averageRating = 0,
-                   totalCount = 0,
-                   Reviews = Array.Empty<ReviewDTO>(),
-                });
+                return NotFound(new { message = "Master Not Found." });
             }
 
-
-
-            foreach (var review in reviews)
-            {
-                FormRevs.Add(new ReviewDTO
-                {
-                    id = review.Id,
-                    rating = review.Rating,
-                    text = review.Text,
-                    createdAt = review.CreatedAt,
-                    clientFirstName = review.User?.FirstName,
-                    clientAvatarUrl = review.User?.AvatarUrl,
-                    serviceName = review.Booking.Service.Name,
-                    durationMin = review.DurationMin,
-                    price = review.Price,
-                    startsAt = review.Booking.StartsAt,
-                    endsAt = review.Booking.EndsAt,
-                    reply = review.Reply,
-                    UpdatedAt = review.UpdatedAt
-
-                });
-            }
-
-            FormRevs = FormRevs.OrderByDescending(r => r.createdAt.HasValue).ThenByDescending(r => r.createdAt).ToList();
-
-            return Ok(new
-            {
-                averageRating = FormRevs.Average(r => r.rating),
-                totalCount = FormRevs.Count,
-                Reviews = FormRevs
-            });
-
-
-
+            return await GetMasterReviewsAsync(Id, cancellationToken);
         }
 
         [HttpPut("booking/{Id:int}")]
         [ServiceFilter(typeof(ImageUploadFilter))]
         [Consumes("multipart/form-data")]
         [Authorize(Roles = "Client")]
-
-        public async Task<ActionResult> CreateReview(int Id, [FromForm]CreateReviewDTO dto) 
+        public async Task<ActionResult> CreateReview(
+            int Id,
+            [FromForm] CreateReviewDTO dto,
+            CancellationToken cancellationToken)
         {
             if (dto.Rating < 1 || dto.Rating > 5)
             {
-                return BadRequest(new
-                {
-                    message = "Rating must be between 1 and 5."
-                });
+                return BadRequest(new { message = "Rating must be between 1 and 5." });
             }
-            var userid = User.FindFirstValue("userId");
 
-            if (!int.TryParse(userid, out var UserId))
+            if (string.IsNullOrWhiteSpace(dto.Text))
+            {
+                return BadRequest(new { message = "Text is required for review." });
+            }
+
+            if (User.UserId() is not int userId)
+            {
                 return Unauthorized();
+            }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == UserId);
+            await using var transaction = await _userWriteLock.AcquireAsync(
+                userId,
+                cancellationToken);
 
-            if (user == null) { return NotFound(new { message="User Profile Not Found."}); }
-            var booking = await _context.Bookings.Include(b=>b.Service).Include(b=>b.Review).ThenInclude(r=>r.Files).Where(b => b.Id == Id && b.UserId == UserId).FirstOrDefaultAsync();
+            var booking = await _context.Bookings
+                .Include(booking => booking.Service)
+                .Include(booking => booking.Review)
+                    .ThenInclude(review => review!.Files)
+                .Where(booking => booking.Id == Id && booking.UserId == userId)
+                .SingleOrDefaultAsync(cancellationToken);
 
-            if (booking == null) { return NotFound(new { message = "Booking not found."}); }
+            if (booking == null)
+            {
+                return NotFound(new { message = "Booking not found." });
+            }
 
-            if (string.IsNullOrWhiteSpace(dto.Text)) { return BadRequest(new { message="Text is required for review."}); }
+            if (booking.Review?.UserId is int reviewOwnerId && reviewOwnerId != userId)
+            {
+                return NotFound(new { message = "Review Not Found." });
+            }
 
             if (booking.Status != BookingStatus.Completed)
             {
@@ -241,95 +165,131 @@ namespace Slotik.Controllers
                 });
             }
 
-            await using var batch = new PhotoUploadBatch(
-        _photoService,
-        HttpContext.RequestServices
-            .GetRequiredService<ILogger<ReviewController>>());
-
-
-            if (booking.Review == null)
+            var existingPhotoCount = booking.Review?.Files.Count ?? 0;
+            var newPhotoCount = dto.Files?.Count ?? 0;
+            if (existingPhotoCount + newPhotoCount > MaximumPhotosPerReview)
             {
-                Review review = new Review
+                return BadRequest(new
                 {
-                    Rating = dto.Rating,
-                    Text = dto.Text.Trim(),
-                    UserId = UserId,
+                    error = "review_photo_limit_exceeded",
+                    message = "A review can contain at most 3 photos, including existing photos."
+                });
+            }
+
+            await using var batch = new PhotoUploadBatch(
+                _photoService,
+                HttpContext.RequestServices.GetRequiredService<ILogger<ReviewController>>());
+
+            var review = booking.Review;
+            if (review == null)
+            {
+                review = new Review
+                {
+                    UserId = userId,
                     Price = booking.Service.Price,
                     DurationMin = booking.Service.DurationMin,
                     BookingId = booking.Id,
-                    CreatedAt = DateTimeOffset.UtcNow,
-
+                    CreatedAt = DateTimeOffset.UtcNow
                 };
 
-                if (dto.Files != null && dto.Files.Any() && dto.Files.Count <=3)
-                {
-                    foreach (var file in dto.Files)
-                    { 
-                        var result =await batch.AddAsync(file);
-
-                        if (PhotoUploadBatch.Failed(result))
-                        {
-                            return BadRequest(new
-                            {
-                                error = "image_upload_failed"
-                            });
-                        }
-
-                        var photo = new ReviewPhoto 
-                        {
-                            PhotoId = result.PublicId,
-                            PhotoUrl=result.SecureUrl.AbsoluteUri,
-                            Review= review,
-                        };
-
-                        await _context.ReviewPhotos.AddAsync(photo);
-                    }
-                }
-
-                await _context.Reviews.AddAsync(review);
-                await _context.SaveChangesAsync();
-                batch.Commit();
-
+                _context.Reviews.Add(review);
             }
             else
             {
-                if (dto.Files != null && dto.Files.Any() && (booking.Review.Files.Count + dto.Files.Count) <=3)
-                {
-                    foreach (var file in dto.Files)
-                    {
-                        var result = await batch.AddAsync(file);
-
-                        if (PhotoUploadBatch.Failed(result))
-                        {
-                            return BadRequest(new
-                            {
-                                error = "image_upload_failed"
-                            });
-                        }
-
-                        var photo = new ReviewPhoto
-                        {
-                            PhotoId = result.PublicId,
-                            PhotoUrl = result.SecureUrl.AbsoluteUri,
-                            Review = booking.Review,
-                        };
-
-                        await _context.ReviewPhotos.AddAsync(photo);
-                    }
-                }
-
-
-
-                booking.Review.Rating = dto.Rating;
-                booking.Review.Text = dto.Text.Trim();
-                booking.Review.UpdatedAt = DateTimeOffset.UtcNow;
-                await _context.SaveChangesAsync();
-                batch.Commit();
+                review.UpdatedAt = DateTimeOffset.UtcNow;
             }
 
-            
-            return Ok(new {Text = dto.Text.Trim(),Rating=dto.Rating,Price = booking.Service.Price,DurationMin=booking.Service.DurationMin });
+            review.Rating = dto.Rating;
+            review.Text = dto.Text.Trim();
 
+            if (dto.Files != null)
+            {
+                foreach (var file in dto.Files)
+                {
+                    var result = await batch.AddAsync(file);
+                    if (PhotoUploadBatch.Failed(result))
+                    {
+                        return BadRequest(new { error = "image_upload_failed" });
+                    }
+
+                    review.Files.Add(new ReviewPhoto
+                    {
+                        PhotoId = result.PublicId,
+                        PhotoUrl = result.SecureUrl.AbsoluteUri
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            batch.Commit();
+
+            var photos = review.Files
+                .OrderBy(photo => photo.Id)
+                .Select(photo => new ReviewPhotoDto
+                {
+                    Id = photo.Id,
+                    PhotoUrl = photo.PhotoUrl
+                })
+                .ToList();
+
+            return Ok(new
+            {
+                Text = review.Text,
+                Rating = review.Rating,
+                Price = booking.Service.Price,
+                DurationMin = booking.Service.DurationMin,
+                Photos = photos
+            });
+        }
+
+        private async Task<ActionResult> GetMasterReviewsAsync(
+            int masterId,
+            CancellationToken cancellationToken)
+        {
+            var reviews = await _context.Reviews
+                .AsNoTracking()
+                .Where(review => review.Booking.MasterId == masterId)
+                .OrderByDescending(review => review.CreatedAt.HasValue)
+                .ThenByDescending(review => review.CreatedAt)
+                .Select(review => new ReviewDTO
+                {
+                    id = review.Id,
+                    rating = review.Rating,
+                    text = review.Text,
+                    createdAt = review.CreatedAt,
+                    clientFirstName = review.User == null ? null : review.User.FirstName,
+                    clientAvatarUrl = review.User == null ? null : review.User.AvatarUrl,
+                    serviceName = review.Booking.Service.Name,
+                    durationMin = review.DurationMin,
+                    price = review.Price,
+                    startsAt = review.Booking.StartsAt,
+                    endsAt = review.Booking.EndsAt,
+                    reply = review.Reply,
+                    UpdatedAt = review.UpdatedAt,
+                    Photos = review.Files
+                        .OrderBy(photo => photo.Id)
+                        .Select(photo => new ReviewPhotoDto
+                        {
+                            Id = photo.Id,
+                            PhotoUrl = photo.PhotoUrl
+                        })
+                        .ToList()
+                })
+                .ToListAsync(cancellationToken);
+
+            var averageRating = 0.0;
+            if (reviews.Count > 0)
+            {
+                averageRating = reviews.Average(review => review.rating);
+            }
+
+            return Ok(new
+            {
+                averageRating,
+                totalCount = reviews.Count,
+                Reviews = reviews
+            });
         }
     }
 }

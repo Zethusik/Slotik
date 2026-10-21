@@ -18,15 +18,29 @@ namespace Slotik.DTO
         public DateTimeOffset endsAt { get;set; }
         public string? reply { get; set; } 
         public DateTimeOffset? UpdatedAt { get; set; }
-        public List<ReviewPhoto>? Files { get; set; } 
+        public List<ReviewPhotoDto> Photos { get; set; } = [];
 
 
+    }
+
+    public class ReviewPhotoDto
+    {
+        public int Id { get; set; }
+        public string PhotoUrl { get; set; } = string.Empty;
+    }
+
+    public class BookingReviewDto
+    {
+        public int Id { get; set; }
+        public int Rating { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public List<ReviewPhotoDto> Photos { get; set; } = [];
     }
 
     public class CreateReviewDTO
     {
         [Required]
-        public string Text { get; set; }
+        public string Text { get; set; } = string.Empty;
         [Required]
         public int Rating { get; set; }
 

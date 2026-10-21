@@ -73,14 +73,25 @@ public class FullMasterDto
     public string? Email { get; set; } = string.Empty;
     public string? Phone { get; set; } = string.Empty;
 
-    public int? TariffPrice { get; set; }
+    public decimal TariffPrice { get; set; }
 
     public string? Currency { get; set; } = "UAH";
     public string? BillingPeriod { get; set; } = "month";
 
     public DateTimeOffset? nextPaymentAt { get; set; }
     public int BookingsCount { get; set; }
-    public List<Payment> Payments { get; set; } = new List<Payment>();
+    public List<AdminPaymentDto> Payments { get; set; } = [];
+}
+
+public class AdminPaymentDto
+{
+    public int Id { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? PaidAt { get; set; }
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = string.Empty;
+    public PaymentStatus Status { get; set; }
+    public string? ProviderStatus { get; set; }
 }
 
 public class UpdateSubscriptionDto

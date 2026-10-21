@@ -66,7 +66,20 @@ public class BookingController : ControllerBase
                 price = b.Service.Price,
 
                 b.MasterId,
-                b.Review,
+                review = b.Review == null ? null : new BookingReviewDto
+                {
+                    Id = b.Review.Id,
+                    Rating = b.Review.Rating,
+                    Text = b.Review.Text,
+                    Photos = b.Review.Files
+                        .OrderBy(photo => photo.Id)
+                        .Select(photo => new ReviewPhotoDto
+                        {
+                            Id = photo.Id,
+                            PhotoUrl = photo.PhotoUrl
+                        })
+                        .ToList()
+                },
             })
             .ToListAsync(cancellationToken);
 

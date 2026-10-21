@@ -14,10 +14,12 @@ namespace Slotik.Controllers;
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly LiqPayService _prices;
 
-    public AdminController(AppDbContext context)
+    public AdminController(AppDbContext context, LiqPayService prices)
     {
         _context = context;
+        _prices = prices;
     }
 
     // GET /api/Admin/stats
@@ -221,16 +223,16 @@ public class AdminController : ControllerBase
     [HttpGet("Master/{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var m = await _context.Masters
+        var master = await _context.Masters
+            .AsNoTracking()
             .Include(m => m.User)
             .Include(m => m.Category)
             .Include(m => m.Subscriptions)
             .Include(m => m.District)
                 .ThenInclude(d => d.City)
-            .Include(m => m.Bookings)
             .FirstOrDefaultAsync(m => m.Id == id);
 
-        if (m == null)
+        if (master == null)
         {
             return NotFound(new
             {
@@ -238,9 +240,37 @@ public class AdminController : ControllerBase
             });
         }
 
-        var activeSubscription = EffectivePlanResolver.Resolve(m.Subscriptions, DateTimeOffset.UtcNow);
+        var activeSubscription = EffectivePlanResolver.Resolve(
+            master.Subscriptions,
+            DateTimeOffset.UtcNow);
 
-        var isBlocked = m.IsBlocked;
+        var tariffPrice = 0m;
+        if (activeSubscription != null && activeSubscription.Plan != SubscriptionPlan.Free)
+        {
+            tariffPrice = _prices.GetPrice(activeSubscription.Plan);
+        }
+
+        var payments = await _context.Payments
+            .AsNoTracking()
+            .Where(payment => payment.Subscription.MasterId == id)
+            .OrderByDescending(payment => payment.PaidAt ?? payment.CreatedAt)
+            .ThenByDescending(payment => payment.Id)
+            .Select(payment => new AdminPaymentDto
+            {
+                Id = payment.Id,
+                CreatedAt = payment.CreatedAt,
+                PaidAt = payment.PaidAt,
+                Amount = payment.Amount,
+                Currency = payment.Currency,
+                Status = payment.Status,
+                ProviderStatus = payment.ProviderStatus
+            })
+            .ToListAsync();
+
+        var bookingsCount = await _context.Bookings
+            .CountAsync(booking => booking.MasterId == id);
+
+        var isBlocked = master.IsBlocked;
 
         var currentStatus =
             isBlocked
@@ -256,15 +286,15 @@ public class AdminController : ControllerBase
 
         var dto = new FullMasterDto
         {
-            Id = m.Id,
+            Id = master.Id,
 
-            FirstName = m.User.FirstName,
-            LastName = m.User.LastName,
+            FirstName = master.User.FirstName,
+            LastName = master.User.LastName,
 
-            Category = m.Category.Name,
+            Category = master.Category.Name,
 
             City =
-                m.District?.City?.Name
+                master.District?.City?.Name
                 ?? "Unknown",
 
             Status = currentStatus,
@@ -278,33 +308,32 @@ public class AdminController : ControllerBase
 
             Tariff = currentTariff,
 
-            IsBlocked = m.IsBlocked,
+            IsBlocked = master.IsBlocked,
 
-            AvatarUrl = string.IsNullOrWhiteSpace(m.User.AvatarUrl) ? null : m.User.AvatarUrl,
+            AvatarUrl = string.IsNullOrWhiteSpace(master.User.AvatarUrl)
+                ? null
+                : master.User.AvatarUrl,
             
 
             DistrictName =
-                m.District?.Name
+                master.District?.Name
                 ?? "Unknown",
 
-            CreatedAt = m.User.CreatedAt,
+            CreatedAt = master.User.CreatedAt,
 
-            slug = m.Slug,
+            slug = master.Slug,
 
-            Email = m.User.Email,
+            Email = master.User.Email,
 
-            Phone = m.User.Phone,
+            Phone = master.User.Phone,
 
-            TariffPrice = 0,
-            // TODO: connect tariff pricing
+            TariffPrice = tariffPrice,
 
-            nextPaymentAt = activeSubscription != null ? activeSubscription.ExpiresAt : null,
+            nextPaymentAt = null,
             
 
-            BookingsCount = m.Bookings
-                .Select(b => b.UserId)
-                .Distinct()
-                .Count()
+            BookingsCount = bookingsCount,
+            Payments = payments
         };
 
         if (activeSubscription == null || activeSubscription.Plan == SubscriptionPlan.Free)

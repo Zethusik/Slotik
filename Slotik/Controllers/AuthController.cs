@@ -357,7 +357,7 @@ namespace Slotik.Controllers
             {
                 UserId = UserId,
                 Token = HashToken(Token),
-                ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(5),
 
 
             };

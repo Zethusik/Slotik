@@ -17,7 +17,12 @@ public class AppDbContext : DbContext
     public DbSet<District> Districts { get; set; }
     public DbSet<Service> Services { get; set; }
     public DbSet<ServicePhoto> ServicePhotos { get; set; }
+
+
     public DbSet<Schedule> Schedules { get; set; }
+    public DbSet<ScheduleInterval> ScheduleIntervals { get; set; }
+
+
     public DbSet<DaysOff> DaysOff { get; set; }
     public DbSet<Booking> Bookings { get; set; }
     public DbSet<Review> Reviews { get; set; }
@@ -25,13 +30,73 @@ public class AppDbContext : DbContext
     public DbSet<Favorite> Favorites { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<Payment> Payments { get; set; }
+    public DbSet<EntitlementGrant> EntitlementGrants { get; set; }
     public DbSet<PendingReset> PendingResets { get; set; }
 
     public DbSet<PendingRegistration> PendingRegistrations { get; set; }
 
+    public DbSet<ServiceGroup> ServiceGroups { get; set; }
+
+    public DbSet<PortfolioPhoto> PortfolioPhotos => Set<PortfolioPhoto>();
+    public DbSet<TelegramLinkToken> TelegramLinkTokens { get; set; }
+    public DbSet<TelegramBinding> TelegramBindings { get; set; }
+
+    public DbSet<TelegramNotification> TelegramNotification { get; set; }
+
+    public DbSet<ReviewPhoto> ReviewPhotos { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<TelegramBinding>()
+            .HasIndex(x => x.UserId)
+            .IsUnique();
+
+        modelBuilder.Entity<TelegramBinding>()
+            .HasIndex(x => x.TelegramUserId)
+            .IsUnique();
+
+        modelBuilder.Entity<EntitlementGrant>().HasIndex(g => g.PaymentId).IsUnique();
+        modelBuilder.Entity<EntitlementGrant>().HasIndex(g => g.SourceSubscriptionId).IsUnique();
+        modelBuilder.Entity<EntitlementGrant>().HasIndex(g => new { g.MasterId, g.ChainId });
+        modelBuilder.Entity<EntitlementGrant>().HasOne(g => g.Payment).WithMany()
+            .HasForeignKey(g => g.PaymentId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<EntitlementGrant>().HasOne(g => g.SourceSubscription).WithMany()
+            .HasForeignKey(g => g.SourceSubscriptionId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<EntitlementGrant>().HasOne<Master>().WithMany()
+            .HasForeignKey(g => g.MasterId).OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PortfolioPhoto>()
+            .HasOne(p => p.Master)
+            .WithMany(m => m.PortfolioPhotos)
+            .HasForeignKey(p => p.MasterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ==========================================
+        // SCHEDULE
+        // ==========================================
+
+        modelBuilder.Entity<Schedule>()
+            .HasIndex(s =>
+                new
+                {
+                    s.MasterId,
+                    s.Weekday
+                })
+            .IsUnique();
+
+        modelBuilder.Entity<Schedule>()
+            .HasOne(s => s.Master)
+            .WithMany(m => m.Schedules)
+            .HasForeignKey(s => s.MasterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ScheduleInterval>()
+            .HasOne(i => i.Schedule)
+            .WithMany(s => s.Intervals)
+            .HasForeignKey(i => i.ScheduleId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<PendingRegistration>()
             .HasIndex(x => x.Email)
@@ -66,6 +131,25 @@ public class AppDbContext : DbContext
             .WithMany(s => s.Payments)
             .HasForeignKey(p => p.SubscriptionId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // LiqPay
+        modelBuilder.Entity<Payment>()
+            .HasIndex(p => p.OrderId)
+            .IsUnique();
+
+
+        modelBuilder.Entity<ServiceGroup>()
+            .HasOne(g => g.Category)
+            .WithMany(c => c.ServiceGroups)
+            .HasForeignKey(g => g.CategoryId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Service>()
+            .HasOne(s => s.Group)
+            .WithMany(g => g.Services)
+            .HasForeignKey(s => s.GroupId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // ==========================================
         //         МАЙСТРИ З ФРІ ПЛАНОМ
@@ -252,7 +336,11 @@ public class AppDbContext : DbContext
                 Price = 300m,
 
                 Description = "Манікюр + гель-лак",
-                Included = "Консультація та виконання послуги"
+                Included = "Консультація та виконання послуги",
+
+                GroupId = 1,
+                IsPopular = true,
+                SortOrder = 2
             }
         );
 
@@ -268,7 +356,12 @@ public class AppDbContext : DbContext
                 Price = 250m,
 
                 Description = "Манікюр + гель",
-                Included = "Консультація та виконання послуги"   
+                Included = "Консультація та виконання послуги",
+
+
+                GroupId = 1,
+                IsPopular = true,
+                SortOrder = 1,
             }
         );
 
@@ -284,7 +377,11 @@ public class AppDbContext : DbContext
                Price = 801m,
 
                Description = "Педикюр",
-               Included = "Консультація та виконання послуги"   
+               Included = "Консультація та виконання послуги",
+
+               GroupId = 2,
+               IsPopular = false,
+               SortOrder = 3
            }
        );
 
@@ -431,6 +528,27 @@ public class AppDbContext : DbContext
 
                 Rating = 4,
                 Text = "Хороший майстер, прийду ще."
+            }
+        );
+
+        modelBuilder.Entity<ServiceGroup>().HasData(
+            new ServiceGroup
+            {
+                Id = 1,
+                Name = "Манікюр",
+                CategoryId = 1
+            },
+            new ServiceGroup
+            {
+                Id = 2,
+                Name = "Педикюр",
+                CategoryId = 1
+            },
+            new ServiceGroup
+            {
+                Id = 3,
+                Name = "Додатково",
+                CategoryId = 1
             }
         );
 

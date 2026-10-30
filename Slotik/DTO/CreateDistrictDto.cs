@@ -2,6 +2,6 @@
 
 public class CreateDistrictDto
 {
-    public string Name { get; set; } = string.Empty;
-    public int CityId { get; set; }
+    [System.ComponentModel.DataAnnotations.Required] public string Name { get; set; } = string.Empty;
+    [System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)] public int CityId { get; set; }
 }

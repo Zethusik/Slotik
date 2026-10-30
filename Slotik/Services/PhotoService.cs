@@ -7,17 +7,15 @@ namespace Slotik.Services
 {
     public class PhotoService : IPhotoService
     {
-        private readonly Cloudinary _cloudinary;
+        private readonly Lazy<Cloudinary> _cloudinary;
 
         public PhotoService(IOptions<CloudinarySettings> config)
         {
-            var account = new Account(
+            _cloudinary = new Lazy<Cloudinary>(() => new Cloudinary(new Account(
                 config.Value.CloudName,
                 config.Value.ApiKey,
                 config.Value.ApiSecret
-            );
-
-            _cloudinary = new Cloudinary(account);
+            )));
         }
 
         public async Task<ImageUploadResult> AddPhotoAsync(IFormFile file)
@@ -33,7 +31,7 @@ namespace Slotik.Services
                     Folder = "slotik"
                 };
 
-                uploadResult = await _cloudinary.UploadAsync(uploadParams);
+                uploadResult = await _cloudinary.Value.UploadAsync(uploadParams);
             }
 
             return uploadResult;
@@ -42,7 +40,7 @@ namespace Slotik.Services
         public async Task<DeletionResult> DeletePhotoAsync(string publicId)
         {
             var deleteParams = new DeletionParams(publicId);
-            return await _cloudinary.DestroyAsync(deleteParams);
+            return await _cloudinary.Value.DestroyAsync(deleteParams);
         }
     }
 }

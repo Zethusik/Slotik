@@ -21,6 +21,8 @@ public class Master
     public string? Address { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public DateTimeOffset? ProTrialUsedAt { get; set; }
+    public bool IsOnboardingCompleted { get; set; }
 
     public ICollection<Service> Services { get; set; } = new List<Service>();
     public ICollection<Favorite> FavoritedBy { get; set; } = new List<Favorite>();
@@ -28,4 +30,6 @@ public class Master
     public ICollection<Schedule> Schedules { get; set; } = new List<Schedule>();
     public ICollection<DaysOff> DaysOff { get; set; } = new List<DaysOff>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
+    public ICollection<PortfolioPhoto> PortfolioPhotos { get; set; } = new List<PortfolioPhoto>();
+
 }

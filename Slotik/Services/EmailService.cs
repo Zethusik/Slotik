@@ -19,6 +19,12 @@ namespace Slotik.Services
             _settings = settings.Value;
         }
 
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(_settings.Host)
+            && _settings.Port is > 0 and <= 65535
+            && !string.IsNullOrWhiteSpace(_settings.Username)
+            && !string.IsNullOrWhiteSpace(_settings.Password)
+            && !string.IsNullOrWhiteSpace(_settings.FromEmail);
+
         public async Task SendConfirmationEmailAsync(string email, string confLink) 
         {
             var message = new MimeMessage();
@@ -56,7 +62,7 @@ namespace Slotik.Services
 
             using var client = new SmtpClient();
 
-            client.CheckCertificateRevocation = false;
+            
 
             await client.ConnectAsync(
                 _settings.Host,
@@ -105,7 +111,7 @@ namespace Slotik.Services
 
             using var client = new SmtpClient();
 
-            client.CheckCertificateRevocation = false;
+            
 
             await client.ConnectAsync(
                 _settings.Host,

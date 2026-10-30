@@ -1,11 +1,17 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
+using CloudinaryDotNet.Actions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Slotik.Data;
 using Slotik.DTO;
 using Slotik.Models;
 using Slotik.Models.Enums;
+using Slotik.Services;
+using System.Security.Claims;
+using System.Threading;
 
 namespace Slotik.Controllers;
 
@@ -14,10 +20,16 @@ namespace Slotik.Controllers;
 public class MasterController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IPhotoService _photoService;
+    private readonly IMasterSubscriptionLock _masterLock;
+    private readonly IUserWriteLock _userLock;
 
-    public MasterController(AppDbContext context)
+    public MasterController(AppDbContext context, IPhotoService photoService, IMasterSubscriptionLock masterLock, IUserWriteLock userLock)
     {
         _context = context;
+        _photoService = photoService;
+        _masterLock = masterLock;
+        _userLock = userLock;
     }
 
     [HttpGet]
@@ -29,18 +41,7 @@ public class MasterController : ControllerBase
         [FromQuery] int? districtId,
         [FromQuery] string? search)
     {
-        var now = DateTimeOffset.UtcNow;
-        var query = _context.Masters
-            .Include(m => m.User)
-            .Include(m => m.Category)
-            .Include(m => m.District)
-                .ThenInclude(d => d.City)
-            .Include(m => m.Subscriptions)
-            .Include(m => m.Services)
-            .Include(m => m.Bookings)
-                .ThenInclude(b => b.Review)
-            .AsQueryable();
-
+        var query = _context.Masters.AsNoTracking().AsQueryable();
         if (categoryId.HasValue)
         {
             query = query.Where(m => m.CategoryId == categoryId.Value);
@@ -75,121 +76,75 @@ public class MasterController : ControllerBase
             );
         }
 
-        var mastersList = await query.ToListAsync();
+        if (!string.IsNullOrEmpty(status))
+            query = query.Where(m => (m.IsBlocked ? "blocked" : "active") == status.ToLower());
+        return Ok(await query.Select(ApiResponses.Master).ToListAsync());
+    }
 
-        var list = mastersList.Select(m =>
+    [HttpGet("admin")]
+    [Authorize(Roles = "Superadmin")]
+    public async Task<IActionResult> GetAdminMasters()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var masters = await _context.Masters.AsNoTracking().Include(m => m.User).Include(m => m.Category)
+            .Include(m => m.District).ThenInclude(d => d.City).Include(m => m.Subscriptions)
+            .Include(m => m.Bookings).ThenInclude(b => b.Review).ToListAsync();
+        return Ok(masters.Select(m =>
         {
-            var activeSub = m.Subscriptions
-                .Where(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > now && s.Plan != SubscriptionPlan.Free)
-                .OrderByDescending(s => s.ExpiresAt)
-                .FirstOrDefault();
-
-            var isBlocked = m.IsBlocked;
-            var currentStatus = isBlocked ? "blocked" : "active";
-            var currentTariff = activeSub != null ? activeSub.Plan.ToString().ToLower() : "free";
-
+            var paid = EffectivePlanResolver.Resolve(m.Subscriptions, now);
             return new MasterAdminDto
             {
-                Id = m.Id,
-                FirstName = m.User.FirstName,
-                LastName = m.User.LastName,
-                Category = m.Category?.Name ?? string.Empty,
-                City = m.District?.City?.Name ?? "Kyiv",
-                Status = currentStatus,
-                SubscriptionUntil = activeSub != null ? activeSub.ExpiresAt : null,
-                Tariff = currentTariff,
-                IsBlocked = m.IsBlocked,
-                DistrictName = m.District?.Name ?? string.Empty,
-                CreatedAt = m.User.CreatedAt,
-                AvatarUrl = string.Empty,
-                Slug = m.Slug,
-                Rating = m.Bookings
-                            .Where(b => b.Review != null)
-                            .Select(b => (double?)b.Review!.Rating)
-                            .Average() ?? null,
-                ClientsCount = m.Bookings
-                            .Where(b => b.Status == BookingStatus.Completed)
-                            .Select(b => b.UserId)
-                            .Distinct()
-                            .Count()
+                Id = m.Id, FirstName = m.User.FirstName, LastName = m.User.LastName,
+                Category = m.Category?.Name ?? "", City = m.District?.City?.Name ?? "",
+                Status = m.IsBlocked ? "blocked" : "active", SubscriptionUntil = paid?.Plan == SubscriptionPlan.Free ? null : paid?.ExpiresAt,
+                Tariff = paid?.Plan.ToString().ToLowerInvariant() ?? "none", IsBlocked = m.IsBlocked,
+                DistrictName = m.District?.Name ?? "", CreatedAt = m.User.CreatedAt, AvatarUrl = m.User.AvatarUrl,
+                Slug = m.Slug, PhotoId = m.User.PhotoId,
+                Rating = m.Bookings.Where(b => b.Review != null).Select(b => (double?)b.Review!.Rating).Average(),
+                ClientsCount = m.Bookings.Where(b => b.Status == BookingStatus.Completed).Select(b => b.UserId).Distinct().Count()
             };
-        }).ToList();
-
-        if (!string.IsNullOrEmpty(status))
-        {
-            list = list.Where(m => m.Status.Equals(status, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-
-        return Ok(list);
+        }));
     }
 
     [HttpGet("{id:int}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetById(int id)
     {
-        var master = await _context.Masters
-            .Include(m => m.User)
-            .Include(m => m.Category)
-            .Include(m => m.District)
-            .FirstOrDefaultAsync(m => m.Id == id);
-
-        if (master == null) return NotFound(new { message = "Master not found" });
-        return Ok(master);
+        var master = await _context.Masters.AsNoTracking().Where(m => m.Id == id)
+            .Select(ApiResponses.Master).FirstOrDefaultAsync();
+        return master == null ? NotFound(new { message = "Master not found" }) : Ok(master);
     }
 
     [HttpGet("slug/{slug}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetBySlug(string slug)
     {
-        var master = await _context.Masters
-            .Include(m => m.User)
-            .Include(m => m.Category)
-            .Include(m => m.District)
-                .ThenInclude(d => d.City)
-            .Include(m => m.Services)
-            .FirstOrDefaultAsync(m => m.Slug == slug);
-
-        if (master == null) return NotFound(new { message = "Master not found" });
-
-        return Ok(new
-        {
-            master.Id,
-            master.UserId,
-            master.Slug,
-            master.About,
-            master.ExperienceYears,
-            master.SlotStepMin,
-            master.IsBlocked,
-            master.CategoryId,
-            CategoryName = master.Category?.Name,
-            master.DistrictId,
-            DistrictName = master.District?.Name,
-            CityName = master.District?.City?.Name,
-            master.Address,
-            master.Latitude,
-            master.Longitude,
-            User = new
-            {
-                master.User.Id,
-                master.User.FirstName,
-                master.User.LastName,
-                master.User.Email,
-                master.User.Phone
-            },
-            master.Services
-        });
+        var master = await _context.Masters.AsNoTracking().Where(m => m.Slug == slug)
+            .Select(ApiResponses.Master).FirstOrDefaultAsync();
+        return master == null ? NotFound(new { message = "Master not found" }) : Ok(master);
     }
-
     [HttpPatch("{id:int}/location")]
-    [Authorize]
+    [Authorize(Roles = "Master,Superadmin")]
     public async Task<IActionResult> UpdateLocation(int id, [FromBody] UpdateMasterLocationDto dto)
     {
+        if (User.UserId() is not int userId) return Unauthorized();
+        var isAdmin = User.IsInRole("Superadmin");
+        if (!await _context.Masters.AsNoTracking().AnyAsync(m => m.Id == id && (isAdmin || m.UserId == userId)))
+            return NotFound(new { message = "Master not found" });
+        await using var transaction = await _masterLock.AcquireAsync(id, HttpContext.RequestAborted);
         var master = await _context.Masters
             .Include(m => m.District)
                 .ThenInclude(d => d.City)
-            .FirstOrDefaultAsync(m => m.Id == id);
+            .FirstOrDefaultAsync(m => m.Id == id && (isAdmin || m.UserId == userId));
 
         if (master == null) return NotFound(new { message = "Master not found" });
 
+        if (dto.DistrictId.HasValue && !await _context.Districts.AnyAsync(d => d.Id == dto.DistrictId.Value))
+            return NotFound(new { message = "District not found" });
+        if (BookingMutationGuard.LocationChanges(master, dto.DistrictId ?? master.DistrictId,
+            dto.Address, dto.Latitude, dto.Longitude) && await BookingMutationGuard
+                .FutureActive(_context, master.Id, DateTimeOffset.UtcNow).AnyAsync())
+            return Conflict(BookingMutationGuard.Conflict("location"));
         if (dto.DistrictId.HasValue)
         {
             master.DistrictId = dto.DistrictId.Value;
@@ -200,6 +155,7 @@ public class MasterController : ControllerBase
         master.Longitude = dto.Longitude;
 
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync(HttpContext.RequestAborted);
 
         return Ok(new
         {
@@ -213,63 +169,352 @@ public class MasterController : ControllerBase
         });
     }
 
-    [HttpPost]
-    [Authorize]
-    public async Task<IActionResult> Create([FromBody] CreateMasterDto dto)
+    [HttpPost("portfolio-photos/add")]
+    [Consumes("multipart/form-data")]
+    [Authorize(Roles = "Master")]
+    [ServiceFilter(typeof(ImageUploadFilter))]
+    public async Task<ActionResult> AddPortfolioPhotos([FromForm]IEnumerable<IFormFile> files, CancellationToken cancellationToken)
     {
-        var user = await _context.Users.FindAsync(dto.UserId);
-        if (user == null)
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        var masterId = await _context.Masters.Where(m=>m.UserId==UserId).Select(m => (int?)m.Id).FirstOrDefaultAsync(cancellationToken);
+
+        if (masterId == null) { return NotFound(new { message = "Master profile not found."}); }
+
+        if (files == null || !files.Any()) { return BadRequest(new { message = "No photos sent." }); }
+
+        var fileList = files?.ToList() ?? [];
+
+        const long maxFileSize = 5 * 1024 * 1024; // 5 MB
+
+        var allowedContentTypes = new[]
         {
-            return NotFound(new { message = $"User with Id {dto.UserId} not found" });
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+        };
+
+        foreach (var file in fileList)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Corrupted file uploaded."
+                });
+            }
+
+            if (file.Length > maxFileSize)
+            {
+                return BadRequest(new
+                {
+                    message = $"File '{file.FileName}' exceeds the 5 MB limit."
+                });
+            }
+
+            if (!allowedContentTypes.Contains(file.ContentType.ToLowerInvariant()))
+            {
+                return BadRequest(new
+                {
+                    message = $"File '{file.FileName}' has unsupported format. Only JPG, PNG and WebP are allowed."
+                });
+            }
         }
 
-        var exists = await _context.Masters.AnyAsync(m => m.UserId == dto.UserId);
+        await using var transaction =
+        await _masterLock.AcquireAsync(
+            masterId.Value,
+            cancellationToken);
+
+
+        var master = await _context.Masters
+        .Include(m => m.PortfolioPhotos)
+        .FirstOrDefaultAsync(
+            m => m.Id == masterId.Value,
+            cancellationToken);
+
+        if (master == null) { return NotFound(new { message = "Master profile not found." }); }
+
+        if ((master.PortfolioPhotos.Count + fileList.Count) > 10) { return BadRequest(new { message="10 photos limit hit."}); }
+
+       
+
+        
+
+            await using var batch = new PhotoUploadBatch(
+        _photoService,
+        HttpContext.RequestServices
+            .GetRequiredService<ILogger<MasterController>>());
+
+      
+
+        List<PortfolioPhoto> newphotos = new List<PortfolioPhoto>();
+
+        foreach (var file in fileList)
+        {
+            var result = await batch.AddAsync(file);
+
+            if (PhotoUploadBatch.Failed(result))
+            {
+                return BadRequest(new
+                {
+                    error = "image_upload_failed"
+                });
+            }
+
+            newphotos.Add(new PortfolioPhoto
+            {
+                PhotoId = result.PublicId,
+                PhotoUrl = result.SecureUrl.AbsoluteUri
+            });
+        }
+
+        foreach (var photo in newphotos)
+        {
+            master.PortfolioPhotos.Add(photo);
+        }
+
+
+
+        
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        batch.Commit();
+
+        return Ok(new
+        {
+            message = "Photos added successfully",
+
+            photos = master.PortfolioPhotos.Select(p => new
+            {
+                p.Id,
+                p.PhotoId,
+                p.PhotoUrl
+            }).ToList()
+        });
+    }
+
+    [HttpPost]
+    [ServiceFilter(typeof(ImageUploadFilter))]
+    [EnableRateLimiting("uploads")]
+    [Authorize(Roles = "Master,Superadmin")]
+    
+    public async Task<IActionResult> Create([FromForm] CreateMasterDto dto, [FromQuery] int? id)
+    {
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        var Role = User.FindFirstValue(ClaimTypes.Role);
+
+        if (Role == null)
+            return Unauthorized();
+
+        if (Role.ToString() != "Master")
+        {
+            if (id == null) { return BadRequest(new { message = "id is null" }); }
+            UserId = id.Value;
+        }
+        await using var transaction = await _userLock.AcquireAsync(UserId, HttpContext.RequestAborted);
+        var user = await _context.Users.FindAsync(UserId);
+
+
+        if (user == null)
+        {
+            return NotFound(new { message = $"User with Id {UserId} not found" });
+        }
+
+        if (user.Role != UserRole.Master)
+        {
+            return BadRequest(new
+            {
+                message = "Selected user does not have Master role."
+            });
+        }
+
+
+
+
+
+
+
+
+
+
+        var exists = await _context.Masters.AnyAsync(m => m.UserId == UserId);
         if (exists)
         {
             return BadRequest(new { message = "Master for this user already exists" });
         }
+        if (!await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId)
+            || !await _context.Districts.AnyAsync(d => d.Id == dto.DistrictId))
+            return NotFound(new { message = "Category or District not found" });
+
+        List<PortfolioPhoto> photos = new List<PortfolioPhoto>();
+        await using var batch = new PhotoUploadBatch(_photoService,
+            HttpContext.RequestServices.GetRequiredService<ILogger<MasterController>>());
+
+        if (dto.portfolioPhotos != null && dto.portfolioPhotos.Any()) {
+
+            if (dto.portfolioPhotos.Count > 10) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
+            foreach (var file in dto.portfolioPhotos)
+            {
+                if (file == null || file.Length == 0)
+                    return BadRequest("Corrupted file uploaded");
+
+                var result = await batch.AddAsync(file);
+
+                if (PhotoUploadBatch.Failed(result))
+                {
+                    return BadRequest(new
+                    {
+                        error = "image_upload_failed"
+                    });
+                }
+
+                PortfolioPhoto photo = new PortfolioPhoto
+                {
+                    PhotoId = result.PublicId,
+                    PhotoUrl = result.SecureUrl.AbsoluteUri,
+
+                };
+
+
+                photos.Add(photo);
+
+            }
+        }
 
         var master = new Master
         {
-            UserId = dto.UserId,
+            UserId = UserId,
             CategoryId = dto.CategoryId,
             DistrictId = dto.DistrictId,
             Slug = dto.Slug,
             About = dto.About,
             ExperienceYears = dto.ExperienceYears,
             SlotStepMin = dto.SlotStepMin,
-            IsBlocked = dto.IsBlocked,
             Address = dto.Address,
             Latitude = dto.Latitude,
-            Longitude = dto.Longitude
+            Longitude = dto.Longitude,
+            PortfolioPhotos = photos
+
         };
 
         _context.Masters.Add(master);
-        await _context.SaveChangesAsync();
+        await OnboardingService.SaveAndCompleteAsync(_context, master.Id);
+        await transaction.CommitAsync(HttpContext.RequestAborted);
+        batch.Commit();
 
-        return CreatedAtAction(nameof(GetById), new { id = master.Id }, master);
+        return CreatedAtAction(nameof(GetById), new { id = master.Id }, new { master.Id, master.Slug });
     }
 
-    [HttpPut("{id:int}")]
-    [Authorize]
-    public async Task<IActionResult> Update(int id, [FromBody] CreateMasterDto dto)
+    [HttpPut]
+    [ServiceFilter(typeof(ImageUploadFilter))]
+    [EnableRateLimiting("uploads")]
+    [Authorize(Roles = "Master,Superadmin")]
+    public async Task<IActionResult> Update([FromForm] CreateMasterDto dto, [FromQuery] int? id)
     {
-        var master = await _context.Masters.FindAsync(id);
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        if (User.IsInRole("Superadmin"))
+        {
+            if (id == null) { return BadRequest(new { message = "id is null" }); }
+            UserId = id.Value;
+        }
+
+        var masterId = await _context.Masters.AsNoTracking().Where(m => m.UserId == UserId)
+            .Select(m => (int?)m.Id).SingleOrDefaultAsync();
+        if (masterId == null) return NotFound(new { message = "Master not found" });
+        await using var transaction = await _masterLock.AcquireAsync(masterId.Value, HttpContext.RequestAborted);
+        var master = await _context.Masters
+             .Include(m => m.PortfolioPhotos)
+             .FirstOrDefaultAsync(m => m.Id == masterId.Value);
+
         if (master == null) return NotFound(new { message = "Master not found" });
+        if (!await _context.Categories.AnyAsync(c => c.Id == dto.CategoryId)
+            || !await _context.Districts.AnyAsync(d => d.Id == dto.DistrictId))
+            return NotFound(new { message = "Category or District not found" });
+
+        if (master.CategoryId != dto.CategoryId && await BookingMutationGuard
+            .CategoryConflictsAsync(_context, master.Id, dto.CategoryId, HttpContext.RequestAborted))
+            return Conflict(new { error = "dependent_services_conflict",
+                message = "Update dependent Service Groups before changing the Master's category." });
+        if (master.SlotStepMin != dto.SlotStepMin && await BookingMutationGuard
+            .StepConflictsAsync(_context, master.Id, dto.SlotStepMin, HttpContext.RequestAborted))
+            return Conflict(BookingMutationGuard.Conflict("slot step"));
+        if (BookingMutationGuard.LocationChanges(master, dto.DistrictId, dto.Address, dto.Latitude, dto.Longitude)
+            && await BookingMutationGuard.FutureActive(_context, master.Id, DateTimeOffset.UtcNow).AnyAsync())
+            return Conflict(BookingMutationGuard.Conflict("location"));
+
+        List<PortfolioPhoto> photos = new List<PortfolioPhoto>();
+        await using var batch = new PhotoUploadBatch(_photoService,
+            HttpContext.RequestServices.GetRequiredService<ILogger<MasterController>>());
+
+        if (dto.portfolioPhotos != null && dto.portfolioPhotos.Any())
+        {
+            if (dto.portfolioPhotos.Count > (10 - master.PortfolioPhotos.Count)) { return BadRequest(new { message = "No more than 10 photos in portfolio" }); }
+
+            foreach (var file in dto.portfolioPhotos)
+            {
+                if (file == null || file.Length == 0)
+                    return BadRequest("Corrupted file uploaded");
+
+                var result = await batch.AddAsync(file);
+
+                if (PhotoUploadBatch.Failed(result))
+                {
+                    return BadRequest(new
+                    {
+                        error = "image_upload_failed"
+                    });
+                }
+
+                PortfolioPhoto photo = new PortfolioPhoto
+                {
+                    PhotoId = result.PublicId,
+                    PhotoUrl = result.SecureUrl.AbsoluteUri,
+
+                };
+
+
+                photos.Add(photo);
+
+
+
+
+
+            }
+
+
+
+            foreach (var photo in photos) { master.PortfolioPhotos.Add(photo); }
+        }
+
+
+
 
         master.Slug = dto.Slug;
         master.About = dto.About;
         master.ExperienceYears = dto.ExperienceYears;
         master.SlotStepMin = dto.SlotStepMin;
-        master.IsBlocked = dto.IsBlocked;
         master.CategoryId = dto.CategoryId;
         master.DistrictId = dto.DistrictId;
-        master.UserId = dto.UserId;
         master.Address = dto.Address;
         master.Latitude = dto.Latitude;
         master.Longitude = dto.Longitude;
 
-        await _context.SaveChangesAsync();
+        await OnboardingService.SaveAndCompleteAsync(_context, master.Id);
+        await transaction.CommitAsync(HttpContext.RequestAborted);
+        batch.Commit();
         return NoContent();
     }
 
@@ -277,12 +522,48 @@ public class MasterController : ControllerBase
     [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> Delete(int id)
     {
+        if (await _context.EntitlementGrants.AnyAsync(g => g.MasterId == id))
+            return Conflict(new { error = "billing_history_retention" });
         var master = await _context.Masters.FindAsync(id);
         if (master == null) return NotFound(new { message = "Master not found" });
 
         _context.Masters.Remove(master);
         await _context.SaveChangesAsync();
         return Ok(new { message = "Master deleted successfully" });
+    }
+
+    [HttpDelete("portfolio-photo/{id:int}")]
+    [Authorize(Roles = "Master")]
+    public async Task<ActionResult> DeletePhoto(int id)
+    {
+        var userid = User.FindFirstValue("userId");
+
+        if (!int.TryParse(userid, out var UserId))
+            return Unauthorized();
+
+        var masterId = await _context.Masters.AsNoTracking().Where(m => m.UserId == UserId)
+            .Select(m => (int?)m.Id).SingleOrDefaultAsync();
+        if (masterId == null) return NotFound(new { message = "Master Not Found" });
+        await using var transaction = await _masterLock.AcquireAsync(masterId.Value, HttpContext.RequestAborted);
+        var master = await _context.Masters.Include(m => m.PortfolioPhotos).FirstOrDefaultAsync(m => m.Id == masterId.Value);
+
+        if (master == null) return NotFound(new { message = "Master Not Found" });
+
+        var photo = master.PortfolioPhotos.FirstOrDefault(p => p.Id == id);
+
+        if (photo == null) return NotFound(new { message = "Photo not found." });
+
+        _context.PortfolioPhotos.Remove(photo);
+        master.PortfolioPhotos.Remove(photo);
+
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync(HttpContext.RequestAborted);
+        await PhotoUploadBatch.DeleteBestEffortAsync(_photoService, photo.PhotoId,
+            HttpContext.RequestServices.GetRequiredService<ILogger<MasterController>>());
+
+        return Ok(new { message = "Photo deleted." });
+
+
     }
 
     [HttpPatch("{id:int}/block")]
@@ -302,14 +583,25 @@ public class MasterController : ControllerBase
     [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> UpdateMasterSubscription(int id, [FromQuery] SubscriptionPlan? plan, [FromQuery] int? days)
     {
+        if (plan.HasValue && !Enum.IsDefined(plan.Value)) return BadRequest("Invalid plan");
+        if (days.HasValue && days.Value <= 0) return BadRequest("Wrong days value");
+        if (plan == null && days == null) return BadRequest("Empty values - days, plan");
+        if (!await _context.Masters.AnyAsync(m => m.Id == id)) return NotFound(new { message = "Master not found" });
+        await using var billingTransaction = await _masterLock.AcquireAsync(id, HttpContext.RequestAborted);
+        if (await _context.EntitlementGrants.AnyAsync(g => g.MasterId == id))
+            return Conflict(new { error = "managed_entitlement", message = "Use the payment/refund flow for managed billing periods." });
         if (plan == null && days == null) { return BadRequest("Empty values - days, plan"); }
-        var m = await _context.Masters.Include(m=>m.Subscriptions).FirstOrDefaultAsync(m=>m.Id==id);
+        var m = await _context.Masters.Include(m => m.Subscriptions).FirstOrDefaultAsync(m => m.Id == id);
         if (m == null) return NotFound(new { message = "Master not found" });
 
-        var activeSub = m.Subscriptions
-                .Where(s => s.Status == SubscriptionStatus.Active && s.ExpiresAt > DateTimeOffset.UtcNow && s.Plan != SubscriptionPlan.Free)
-                .OrderByDescending(s => s.ExpiresAt)
-                .FirstOrDefault();
+        var activeSub = EffectivePlanResolver.Resolve(m.Subscriptions, DateTimeOffset.UtcNow);
+        if (activeSub?.Plan == SubscriptionPlan.Free) activeSub = null;
+
+        if (days.HasValue)
+        {
+            try { _ = (activeSub?.ExpiresAt ?? DateTimeOffset.UtcNow).AddDays(days.Value); }
+            catch (ArgumentOutOfRangeException) { return BadRequest("Subscription expiry is outside the supported date range"); }
+        }
 
         Subscription nSub = new Subscription { };
 
@@ -317,9 +609,9 @@ public class MasterController : ControllerBase
 
         if (activeSub == null && plan != null)
         {
-            
 
-            
+
+
 
             nSub.Plan = plan.Value;
 
@@ -335,21 +627,23 @@ public class MasterController : ControllerBase
                     nSub.ExpiresAt = DateTimeOffset.UtcNow.AddDays(30);
                 }
             }
-            
 
-            
 
-            
+
+
+
             nSub.MasterId = m.Id;
             nSub.Status = SubscriptionStatus.Active;
-            
+
 
             await _context.Subscriptions.AddAsync(nSub);
             await _context.SaveChangesAsync();
+            await billingTransaction.CommitAsync(HttpContext.RequestAborted);
 
             return Ok(new { text = "Ok", Plan = nSub.Plan, ExpiresAt = nSub.ExpiresAt });
         }
 
+        if (activeSub == null) return BadRequest("No active paid subscription");
         if (plan != null)
         {
             nSub.Plan = plan.Value;
@@ -358,18 +652,18 @@ public class MasterController : ControllerBase
             {
                 nSub.ExpiresAt = activeSub.ExpiresAt.AddDays(days.Value);
             }
-            else 
+            else
             {
                 if (plan != SubscriptionPlan.Free)
                 {
                     nSub.ExpiresAt = activeSub.ExpiresAt;
                 }
-               
+
             }
 
-            
+
             nSub.MasterId = activeSub.MasterId;
-           
+
             nSub.Status = SubscriptionStatus.Active;
 
             activeSub.Status = SubscriptionStatus.Cancelled;
@@ -386,18 +680,21 @@ public class MasterController : ControllerBase
             if (days.Value <= 0) { return BadRequest("Wrong days value"); }
             activeSub.ExpiresAt = activeSub.ExpiresAt.AddDays(days.Value);
             await _context.SaveChangesAsync();
+            await billingTransaction.CommitAsync(HttpContext.RequestAborted);
             return Ok(new { text = "Ok", Plan = activeSub.Plan, ExpiresAt = activeSub.ExpiresAt });
         }
 
 
         await _context.SaveChangesAsync();
+        await billingTransaction.CommitAsync(HttpContext.RequestAborted);
         return Ok(new { text = "Ok", Plan = nSub.Plan, ExpiresAt = nSub.ExpiresAt });
     }
 
     [HttpPost("test-seed/expire-in-10m")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Superadmin")]
     public async Task<IActionResult> CreateTestMasterWith10mSub()
     {
+        if (!HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment()) return NotFound();
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == "test10m@slotik.com");
         if (user == null)
         {

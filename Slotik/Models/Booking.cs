@@ -10,6 +10,7 @@ public class Booking
     public BookingStatus Status { get; set; } = BookingStatus.Pending;
     public string? Comment { get; set; }
     public bool ReminderSent { get; set; }
+    public DateTimeOffset? PendingExpiresAt { get; set; }
 
     public int ServiceId { get; set; }
     public Service Service { get; set; } = null!;

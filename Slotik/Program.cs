@@ -52,6 +52,7 @@ public class Program
 
         builder.Services.AddEndpointsApiExplorer();
 
+
         // Swagger
         builder.Services.AddSwaggerGen(options =>
         {
@@ -62,6 +63,37 @@ public class Program
                     Title = "Slotik API",
                     Version = "v2"
                 });
+
+            options.AddSecurityDefinition(
+                "Bearer",
+                new OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    In = ParameterLocation.Header,
+                    Description = "Enter JWT token"
+                });
+
+            options.AddSecurityRequirement(
+                new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference =
+                                new OpenApiReference
+                                {
+                                    Type = ReferenceType.SecurityScheme,
+                                    Id = "Bearer"
+                                }
+                        },
+                        Array.Empty<string>()
+                    }
+                });
+        });
+
 
             options.AddSecurityDefinition(
                 "Bearer",
